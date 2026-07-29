@@ -73,19 +73,6 @@
     display: none;
   }
   .char-avatar.show { display: block; }
-  /* ba-timeline側のSTRIKER/SPECIAL区分バッジと同じ配色 */
-  .role-badge {
-    display: none;
-    flex: none;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 1px 5px;
-    border-radius: 5px;
-    letter-spacing: 0.02em;
-  }
-  .role-badge.show { display: inline-block; }
-  .role-badge.striker { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #d13a3a; }
-  .role-badge.special { background: rgba(99,102,241,0.14); border: 1px solid rgba(99,102,241,0.4); color: #4f52c9; }
   /* 入力したキャラの実際のロールが、そのスロット(ストライカー/スペシャル)と食い違う場合の警告 */
   .slot-input.mismatch input { border-color: #c0392b; background: #fdeeee; }
   .slot-mismatch-note { font-size: 11px; color: #c0392b; display: none; }
@@ -252,16 +239,12 @@ function initCharsGrid() {
     const avatar = document.createElement('img');
     avatar.className = 'char-avatar';
     avatar.alt = '';
-    const badge = document.createElement('span');
-    // スロットの位置(ストライカー1-4/スペシャル1-2)に合わせた既定バッジ。実キャラのroleと食い違えば syncAvatar が上書きする
-    badge.className = 'role-badge ' + (isSpecialSlotIndex(i) ? 'special' : 'striker');
-    badge.textContent = isSpecialSlotIndex(i) ? 'SPE' : 'STR';
     const input = document.createElement('input');
     input.type = 'text';
     input.setAttribute('list', isSpecialSlotIndex(i) ? 'chardict-special' : 'chardict-striker');
     input.dataset.slotIndex = String(i);
     input.addEventListener('input', () => syncAvatar(input));
-    inputWrap.append(avatar, badge, input);
+    inputWrap.append(avatar, input);
     const mismatchNote = document.createElement('div');
     mismatchNote.className = 'slot-mismatch-note';
     mismatchNote.textContent = isSpecialSlotIndex(i) ? '⚠ ストライカーのキャラです' : '⚠ スペシャルのキャラです';
@@ -270,12 +253,11 @@ function initCharsGrid() {
   }
 }
 
-// 入力欄の値がキャラ辞書と一致したら、隣に顔アイコン・ロールバッジを表示し、
+// 入力欄の値がキャラ辞書と一致したら隣に顔アイコンを表示し、
 // スロット(ストライカー/スペシャル)と実際のロールが食い違っていれば警告する
 function syncAvatar(input) {
   const inputWrap = input.parentElement;
   const avatar = inputWrap.querySelector('.char-avatar');
-  const badge = inputWrap.querySelector('.role-badge');
   const mismatchNote = inputWrap.nextElementSibling;
   const name = normalizeName(input.value);
   const image = charImageByName.get(name);
@@ -289,15 +271,7 @@ function syncAvatar(input) {
 
   const i = Number(input.dataset.slotIndex);
   const known = charRoleByName.has(name);
-  let mismatch = false;
-  if (name && known) {
-    const actualSpecial = isSpecialRole(name);
-    mismatch = actualSpecial !== isSpecialSlotIndex(i);
-    badge.className = 'role-badge show ' + (actualSpecial ? 'special' : 'striker');
-    badge.textContent = actualSpecial ? 'SPE' : 'STR';
-  } else {
-    badge.classList.remove('show');
-  }
+  const mismatch = name && known && isSpecialRole(name) !== isSpecialSlotIndex(i);
   inputWrap.classList.toggle('mismatch', mismatch);
   mismatchNote.classList.toggle('show', mismatch);
 }
@@ -361,7 +335,11 @@ async function refresh() {
     for (const name of r.characters || []) if (name) names.add(name);
   }
   dict = { names: [...names] };
-  charImageByName = new Map(characters.map((c) => [c.name, c.image]));
+  // image はba-timeline側では"/characters/xxx.png"という相対パスなので、
+  // このサイト自身のオリジンに対して解決されてしまわないようba-timelineの
+  // オリジンを明示的に付ける
+  const charBase = new URL(CHAR_SOURCE_URL).origin;
+  charImageByName = new Map(characters.map((c) => [c.name, charBase + c.image]));
   charRoleByName = new Map(characters.map((c) => [c.name, c.role || '']));
   syncAllAvatars();
 
