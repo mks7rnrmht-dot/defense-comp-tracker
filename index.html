@@ -15,6 +15,8 @@
     --muted: #7a8ea3;
     --win: #e8890c;
     --lose: #4a90d9;
+    --striker: #f0819f;
+    --special: #5bb8e0;
   }
   * { box-sizing: border-box; }
   body {
@@ -64,16 +66,21 @@
   /* D1-4/A1-4とSP1-2をそれぞれ揃った幅の列でグループ化する。SPの方は2枠だけ
      置くが同じ4列グリッドを使うので、D/Aの枠と横幅が揃う。 */
   .chars-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
-  .position-stats-col { display: flex; flex-direction: column; gap: 18px; }
-  .position-block h3 { margin: 0 0 6px; font-size: 13px; color: var(--accent-dark); }
-  .position-block table { margin-bottom: 4px; }
   .chars-grid-4 .slot { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .chars-grid-4 .slot span { font-size: 11px; color: var(--muted); }
   .chars-grid-4 .slot-input { display: flex; align-items: center; gap: 6px; }
   .chars-grid-4 .slot-input input { flex: 1; min-width: 0; }
+  /* キャラアイコン共通。縁取りの色でストライカー(ピンク)/スペシャル(水色)を区別する。
+     色はスロット位置ではなくキャラ本来の役割に基づくので、どの画面でも意味が一定になる。 */
+  .char-icon {
+    border-radius: 50%; object-fit: cover;
+    background: #e9f1f9; flex: none;
+    border: 2px solid var(--border);
+  }
+  .char-icon.striker { border-color: var(--striker); }
+  .char-icon.special { border-color: var(--special); }
   .char-avatar {
-    width: 30px; height: 30px; border-radius: 50%; object-fit: cover;
-    border: 1px solid var(--border); background: #e9f1f9; flex: none;
+    width: 30px; height: 30px;
     display: none;
   }
   .char-avatar.show { display: block; }
@@ -97,10 +104,7 @@
   }
   .suggest-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
   .suggest-item:hover, .suggest-item.active { background: #eef4fa; }
-  .suggest-item img, .suggest-item .noimg {
-    width: 22px; height: 22px; border-radius: 50%; object-fit: cover;
-    background: #e9f1f9; border: 1px solid var(--border); flex: none;
-  }
+  .suggest-item .char-icon { width: 22px; height: 22px; }
   button {
     font-size: 14px;
     padding: 8px 20px;
@@ -124,12 +128,23 @@
   .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; }
   .pill.Win { background: var(--win); }
   .pill.Lose { background: var(--lose); }
-  .chips { margin-bottom: 4px; }
-  .chips .chips-label { font-size: 11px; color: var(--muted); margin-right: 4px; }
-  .chips span.chip {
-    display: inline-block; background: #eef4fa; border: 1px solid var(--border);
-    border-radius: 6px; padding: 2px 7px; margin: 1px 2px; font-size: 12px;
+  .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .chips .chips-label { font-size: 11px; color: var(--muted); margin-right: 2px; }
+  .chips .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #eef4fa; border: 1px solid var(--border);
+    border-radius: 999px; padding: 2px 9px 2px 2px; font-size: 12px;
   }
+  .chips .chip .char-icon { width: 22px; height: 22px; }
+  /* 名前セル: アイコン+名前を横並びにする(集計表向け) */
+  .name-cell { display: flex; align-items: center; gap: 7px; }
+  .name-cell .char-icon { width: 26px; height: 26px; }
+  /* ポジション別集計: 各ポジションを列として横並びにし、各列内は縦にキャラを積む */
+  .position-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px; }
+  .position-block h3 { margin: 0 0 6px; font-size: 13px; color: var(--accent-dark); }
+  .position-block table { margin-bottom: 4px; }
+  .show-all-btn { background: none; color: var(--accent-dark); padding: 4px 6px; font-size: 12px; }
+  .show-all-btn:hover { background: #eef4fa; }
   .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
   .counts { font-size: 12px; color: var(--muted); margin-left: 8px; }
 </style>
@@ -236,6 +251,7 @@ const MODE_CONFIG = {
   },
 };
 const SP_LABELS = ['SP1', 'SP2'];
+const POSITION_ROW_LIMIT = 16; // ポジション別集計で最初に表示する件数(超過分は「すべて表示」で開く)
 let currentMode = 'oppAttack';
 
 let dict = { names: [] };
@@ -321,6 +337,20 @@ function closeSuggest() {
   suggestIndex = -1;
 }
 
+// キャラアイコンのHTML。縁取りの色はキャラ本来の役割(ストライカー=ピンク/
+// スペシャル=水色)で決まる。画像が無いキャラは同じ大きさの空丸で埋める。
+function charIconHtml(name) {
+  const roleClass = charRoleByName.has(name) ? (isSpecialRole(name) ? 'special' : 'striker') : '';
+  const img = charImageByName.get(name);
+  return img
+    ? `<img class="char-icon ${roleClass}" src="${esc(img)}" alt="">`
+    : `<span class="char-icon ${roleClass}"></span>`;
+}
+
+function charChipHtml(name) {
+  return `<span class="chip">${charIconHtml(name)}${esc(name)}</span>`;
+}
+
 function showSuggest(input) {
   const isSpecial = input.dataset.special === '1';
   const q = normalizeName(input.value);
@@ -335,11 +365,8 @@ function showSuggest(input) {
   suggestIndex = -1;
 
   const el = suggestPopupEl();
-  el.innerHTML = matches.map((n, i) => {
-    const img = charImageByName.get(n);
-    const icon = img ? `<img src="${img}" alt="">` : '<span class="noimg"></span>';
-    return `<div class="suggest-item" data-idx="${i}">${icon}<span>${esc(n)}</span></div>`;
-  }).join('');
+  el.innerHTML = matches.map((n, i) =>
+    `<div class="suggest-item" data-idx="${i}">${charIconHtml(n)}<span>${esc(n)}</span></div>`).join('');
   el.querySelectorAll('.suggest-item').forEach((item) => {
     const idx = Number(item.dataset.idx);
     item.addEventListener('mousedown', (e) => { e.preventDefault(); selectSuggest(idx); });
@@ -395,7 +422,7 @@ function buildCharSlot(labelText, isSpecial, onInput) {
   const inputWrap = document.createElement('div');
   inputWrap.className = 'slot-input';
   const avatar = document.createElement('img');
-  avatar.className = 'char-avatar';
+  avatar.className = 'char-icon char-avatar';
   avatar.alt = '';
   const input = document.createElement('input');
   input.type = 'text';
@@ -439,6 +466,9 @@ function syncAvatar(input) {
   const mismatchNote = inputWrap.nextElementSibling;
   const name = normalizeName(input.value);
   const image = charImageByName.get(name);
+  const known = charRoleByName.has(name);
+  avatar.classList.toggle('striker', known && !isSpecialRole(name));
+  avatar.classList.toggle('special', known && isSpecialRole(name));
   if (image) {
     avatar.src = image;
     avatar.classList.add('show');
@@ -447,7 +477,6 @@ function syncAvatar(input) {
     avatar.src = '';
   }
 
-  const known = charRoleByName.has(name);
   const isSpecialSlot = input.dataset.special === '1';
   const mismatch = name && known && isSpecialRole(name) !== isSpecialSlot;
   inputWrap.classList.toggle('mismatch', mismatch);
@@ -589,7 +618,7 @@ function renderStats(list) {
       <thead><tr><th>キャラ</th><th style="width:70px;text-align:right">回数</th><th style="width:80px;text-align:right">採用率</th><th></th></tr></thead>
       <tbody>${rows.map(([name, n]) => `
         <tr>
-          <td>${esc(name)}</td>
+          <td><div class="name-cell">${charIconHtml(name)}<span>${esc(name)}</span></div></td>
           <td class="num">${n}</td>
           <td class="num">${(n / total * 100).toFixed(1)}%</td>
           <td><div class="bar-bg"><div class="bar" style="width:${(n / max * 100).toFixed(1)}%"></div></div></td>
@@ -617,18 +646,41 @@ function renderPositionStats(list, slotLabels) {
     }
   }
 
-  let html = '<div class="position-stats-col">';
+  let html = '<div class="position-stats-grid">';
   positionCounts.forEach((counts, i) => {
     const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
-    html += `<div class="position-block"><h3>${slotLabels[i]}</h3><table>`;
+    html += `<div class="position-block"><h3>${slotLabels[i]}</h3>`;
     if (rows.length === 0) {
-      html += '<tr><td>データなし</td></tr>';
+      html += '<table><tr><td>データなし</td></tr></table>';
     } else {
-      html += rows.map(([name, n]) => `<tr><td>${esc(name)}</td><td class="num">${n}回</td></tr>`).join('');
+      // 縦に長くなりすぎないよう、POSITION_ROW_LIMIT件を超える分は「すべて表示」まで隠す
+      const hidden = rows.length > POSITION_ROW_LIMIT;
+      const rowHtml = (r, idx) => `<tr${hidden && idx >= POSITION_ROW_LIMIT ? ' class="extra-row" hidden' : ''}>` +
+        `<td><div class="name-cell">${charIconHtml(r[0])}<span>${esc(r[0])}</span></div></td>` +
+        `<td class="num">${r[1]}回</td></tr>`;
+      html += `<table>${rows.map(rowHtml).join('')}</table>`;
+      if (hidden) {
+        html += `<button class="show-all-btn" data-showall>すべて表示 (残り${rows.length - POSITION_ROW_LIMIT}件)</button>`;
+      }
     }
-    html += '</table></div>';
+    html += '</div>';
   });
   container.innerHTML = html + '</div>';
+
+  container.querySelectorAll('[data-showall]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const block = btn.closest('.position-block');
+      const hiddenRows = block.querySelectorAll('.extra-row[hidden]');
+      if (hiddenRows.length) {
+        hiddenRows.forEach((tr) => tr.removeAttribute('hidden'));
+        btn.textContent = '折りたたむ';
+      } else {
+        const extras = block.querySelectorAll('.extra-row');
+        extras.forEach((tr) => tr.setAttribute('hidden', ''));
+        btn.textContent = `すべて表示 (残り${extras.length}件)`;
+      }
+    });
+  });
 }
 
 function renderOpponents(list) {
@@ -664,8 +716,8 @@ function renderHistory(list) {
           <td>${esc(r.opponent.name)}</td>
           <td>${r.defenseResult ? `<span class="pill ${r.defenseResult}">${r.defenseResult}</span>` : '－'}</td>
           <td>
-            <div class="chips"><span class="chips-label">相手</span>${r.characters.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
-            <div class="chips"><span class="chips-label">自分</span>${(r.myCharacters && r.myCharacters.length) ? r.myCharacters.map((c) => `<span class="chip">${esc(c)}</span>`).join('') : '<span class="empty" style="padding:0;display:inline;">(未入力)</span>'}</div>
+            <div class="chips"><span class="chips-label">相手</span>${r.characters.map(charChipHtml).join('')}</div>
+            <div class="chips"><span class="chips-label">自分</span>${(r.myCharacters && r.myCharacters.length) ? r.myCharacters.map(charChipHtml).join('') : '<span class="empty" style="padding:0;display:inline;">(未入力)</span>'}</div>
           </td>
           <td><button class="danger" data-del="${r.id}">削除</button></td>
         </tr>`).join('')}
