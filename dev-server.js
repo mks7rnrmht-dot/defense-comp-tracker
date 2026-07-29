@@ -14,6 +14,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
 };
 
 const server = http.createServer((req, res) => {
@@ -29,5 +30,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`防御編成集計ツール(静的): http://localhost:${PORT}`);
+  console.log(`戦術対抗戦 編成記録ツール(静的): http://localhost:${PORT}`);
 });

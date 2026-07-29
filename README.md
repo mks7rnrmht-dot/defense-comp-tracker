@@ -1,4 +1,4 @@
-# 防御編成集計ツール(Vercel版)
+# 戦術対抗戦 編成記録ツール(Vercel版)
 
 ブルーアーカイブ「戦術対抗戦」の対戦編成を手入力で記録・集計するツールです。
 サーバーを持たない完全な静的サイトで、Vercelにそのままデプロイできます。
@@ -62,3 +62,5 @@ node dev-server.js
 - `index.html` — アプリ本体(入力フォーム・localStorage永続化・集計・ba-timeline連携)
 - `dev-server.js` — ローカル確認用の最小静的サーバー(本番では使わない)
 - `vercel.json` — Vercelを静的サイトとして扱わせるための設定
+- `favicon.ico` / `apple-touch-icon.png` — タブ・ホーム画面用の盾アイコン
+  (元画像を透明部分でトリミング→正方形化して生成。`.ico`は16〜256pxを同梱)
