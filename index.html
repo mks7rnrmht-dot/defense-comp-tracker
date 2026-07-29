@@ -60,6 +60,9 @@
     background: #fbfdff;
   }
   .chars-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .position-stats-col { display: flex; flex-direction: column; gap: 18px; }
+  .position-block h3 { margin: 0 0 6px; font-size: 13px; color: var(--accent-dark); }
+  .position-block table { margin-bottom: 4px; }
   .chars-grid .slot { display: flex; flex-direction: column; gap: 4px; }
   .chars-grid .slot span { font-size: 11px; color: var(--muted); }
   .chars-grid .slot-input { display: flex; align-items: center; gap: 6px; }
@@ -234,6 +237,7 @@ function setStatus(msg, isError = false) {
 
 // ---------- 入力フォーム ----------
 const SLOT_LABELS = ['ストライカー1', 'ストライカー2', 'ストライカー3', 'ストライカー4', 'スペシャル1', 'スペシャル2'];
+const POSITION_SHORT_LABELS = ['D1', 'D2', 'D3', 'D4', 'SP1', 'SP2']; // ポジション別集計の表記
 
 function initCharsGrid() {
   const grid = $('charsGrid');
@@ -415,7 +419,7 @@ function renderPositionStats() {
     return;
   }
 
-  // ポジション(ストライカー1-4、スペシャル1-2)ごとのキャラ使用回数を集計
+  // ポジション(D1-4、SP1-2)ごとのキャラ使用回数を集計
   const positionCounts = Array.from({ length: SLOT_COUNT }, () => new Map());
   for (const r of records) {
     for (let i = 0; i < r.characters.length && i < SLOT_COUNT; i++) {
@@ -425,10 +429,10 @@ function renderPositionStats() {
     }
   }
 
-  let html = '<div class="chars-grid">'; // 既存のグリッドスタイルを流用
+  let html = '<div class="position-stats-col">';
   positionCounts.forEach((counts, i) => {
     const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
-    html += `<div><h3>${SLOT_LABELS[i]}</h3><table>`;
+    html += `<div class="position-block"><h3>${POSITION_SHORT_LABELS[i]}</h3><table>`;
     if (rows.length === 0) {
       html += '<tr><td>データなし</td></tr>';
     } else {
