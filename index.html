@@ -82,6 +82,25 @@
   .slot-mismatch-note { font-size: 11px; color: #c0392b; display: none; }
   .slot-mismatch-note.show { display: block; }
   .mode-toggle { margin-bottom: 14px; }
+  /* キャラ名入力欄の候補ポップアップ(画像つき)。ネイティブdatalistは画像を
+     出せないため自前で描画している。inputの真下にposition:fixedで重ねる */
+  .suggest-popup {
+    position: fixed;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(20, 50, 80, 0.16);
+    max-height: 260px;
+    overflow-y: auto;
+    display: none;
+  }
+  .suggest-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+  .suggest-item:hover, .suggest-item.active { background: #eef4fa; }
+  .suggest-item img, .suggest-item .noimg {
+    width: 22px; height: 22px; border-radius: 50%; object-fit: cover;
+    background: #e9f1f9; border: 1px solid var(--border); flex: none;
+  }
   button {
     font-size: 14px;
     padding: 8px 20px;
@@ -187,9 +206,6 @@
   </section>
 </main>
 
-<datalist id="chardict-striker"></datalist>
-<datalist id="chardict-special"></datalist>
-
 <script>
 "use strict";
 
@@ -281,6 +297,93 @@ function setStatus(msg, isError = false) {
   el.className = isError ? 'error' : '';
 }
 
+// ---------- キャラ名候補ポップアップ(画像つき) ----------
+// ネイティブ<datalist>は候補に画像を出せないため、自前の候補リストを描画する。
+let suggestInput = null;   // 現在ポップアップを出している入力欄
+let suggestMatches = [];   // 現在の候補名リスト
+let suggestIndex = -1;     // キーボード操作中のハイライト位置
+
+function suggestPopupEl() {
+  let el = document.getElementById('suggestPopup');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'suggestPopup';
+    el.className = 'suggest-popup';
+    document.body.append(el);
+  }
+  return el;
+}
+
+function closeSuggest() {
+  suggestPopupEl().style.display = 'none';
+  suggestInput = null;
+  suggestMatches = [];
+  suggestIndex = -1;
+}
+
+function showSuggest(input) {
+  const isSpecial = input.dataset.special === '1';
+  const q = normalizeName(input.value);
+  const pool = [...dict.names].filter((n) => isSpecialRole(n) === isSpecial);
+  const matches = (q ? pool.filter((n) => n.includes(q)) : pool)
+    .sort((a, b) => a.localeCompare(b, 'ja'))
+    .slice(0, 8);
+  if (!matches.length) return closeSuggest();
+
+  suggestInput = input;
+  suggestMatches = matches;
+  suggestIndex = -1;
+
+  const el = suggestPopupEl();
+  el.innerHTML = matches.map((n, i) => {
+    const img = charImageByName.get(n);
+    const icon = img ? `<img src="${img}" alt="">` : '<span class="noimg"></span>';
+    return `<div class="suggest-item" data-idx="${i}">${icon}<span>${esc(n)}</span></div>`;
+  }).join('');
+  el.querySelectorAll('.suggest-item').forEach((item) => {
+    const idx = Number(item.dataset.idx);
+    item.addEventListener('mousedown', (e) => { e.preventDefault(); selectSuggest(idx); });
+    item.addEventListener('mouseenter', () => { suggestIndex = idx; highlightSuggest(); });
+  });
+  positionSuggest(input, el);
+  el.style.display = 'block';
+}
+
+function positionSuggest(input, el) {
+  const rect = input.getBoundingClientRect();
+  el.style.left = `${rect.left}px`;
+  el.style.top = `${rect.bottom + 4}px`;
+  el.style.width = `${Math.max(rect.width, 160)}px`;
+}
+
+function highlightSuggest() {
+  const el = suggestPopupEl();
+  [...el.children].forEach((child, i) => child.classList.toggle('active', i === suggestIndex));
+  const activeEl = el.children[suggestIndex];
+  if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+}
+
+function selectSuggest(idx) {
+  if (!suggestInput || idx < 0 || idx >= suggestMatches.length) return;
+  const input = suggestInput;
+  input.value = suggestMatches[idx];
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  closeSuggest();
+  input.focus();
+}
+
+function attachAutocomplete(input) {
+  input.addEventListener('focus', () => showSuggest(input));
+  input.addEventListener('blur', () => setTimeout(closeSuggest, 120)); // 候補クリックのmousedownを先に処理させる
+  input.addEventListener('keydown', (e) => {
+    if (suggestInput !== input || suggestPopupEl().style.display === 'none') return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); suggestIndex = Math.min(suggestIndex + 1, suggestMatches.length - 1); highlightSuggest(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); suggestIndex = Math.max(suggestIndex - 1, 0); highlightSuggest(); }
+    else if (e.key === 'Enter') { if (suggestIndex >= 0) { e.preventDefault(); selectSuggest(suggestIndex); } }
+    else if (e.key === 'Escape') { closeSuggest(); }
+  });
+}
+
 // ---------- 入力フォーム(共通スロットUI) ----------
 // 1スロット分(ラベル・顔アイコン・入力欄・役割食い違い警告)を組み立てる。
 // isSpecial: このスロットがSP(スペシャル)枠かどうか(D1-4/A1-4はfalse、SP1-2はtrue)
@@ -296,9 +399,10 @@ function buildCharSlot(labelText, isSpecial, onInput) {
   avatar.alt = '';
   const input = document.createElement('input');
   input.type = 'text';
+  input.autocomplete = 'off';
   input.dataset.special = isSpecial ? '1' : '0';
-  input.setAttribute('list', isSpecial ? 'chardict-special' : 'chardict-striker');
-  input.addEventListener('input', () => { syncAvatar(input); if (onInput) onInput(); });
+  input.addEventListener('input', () => { syncAvatar(input); showSuggest(input); if (onInput) onInput(); });
+  attachAutocomplete(input);
   inputWrap.append(avatar, input);
   const mismatchNote = document.createElement('div');
   mismatchNote.className = 'slot-mismatch-note';
@@ -449,19 +553,6 @@ async function refresh() {
   dict = { names: [...names] };
   charImageByName = new Map(normalizedChars.map((c) => [c.name, charBase + c.image]));
   charRoleByName = new Map(normalizedChars.map((c) => [c.name, c.role || '']));
-
-  // ストライカー/スペシャルのスロットごとに候補を分ける(ba-timelineの編成編集モーダルと同じ区分)。
-  // ba-timelineにまだ無い名前(保存済み履歴だけにある名前)はroleが分からないため、
-  // ストライカー側の候補にだけ入れておく(誤って隠さないためのフォールバック)。
-  const dlStriker = $('chardict-striker');
-  const dlSpecial = $('chardict-special');
-  dlStriker.innerHTML = '';
-  dlSpecial.innerHTML = '';
-  for (const n of [...dict.names].sort((a, b) => a.localeCompare(b, 'ja'))) {
-    const opt = document.createElement('option');
-    opt.value = n;
-    (isSpecialRole(n) ? dlSpecial : dlStriker).append(opt);
-  }
 
   syncAllAvatars();
   renderAll();
