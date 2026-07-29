@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>防御編成集計ツール</title>
+<style>
+  :root {
+    --accent: #2b8fd9;
+    --accent-dark: #1a6eae;
+    --bg: #eef4fa;
+    --card: #ffffff;
+    --border: #d5e2ee;
+    --text: #29394a;
+    --muted: #7a8ea3;
+    --win: #e8890c;
+    --lose: #4a90d9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: linear-gradient(120deg, #1a6eae, #2b8fd9);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+  header .sub { font-size: 12px; opacity: 0.85; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    color: var(--accent-dark);
+    border-left: 4px solid var(--accent);
+    padding-left: 8px;
+  }
+  #status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 18px; }
+  #status.error { color: #c0392b; }
+  .formrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .formrow label { font-size: 13px; color: var(--muted); }
+  input[type="text"], select {
+    font-size: 14px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fbfdff;
+  }
+  .chars-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .chars-grid .slot { display: flex; flex-direction: column; gap: 4px; }
+  .chars-grid .slot span { font-size: 11px; color: var(--muted); }
+  .chars-grid .slot-input { display: flex; align-items: center; gap: 6px; }
+  .chars-grid .slot-input input { flex: 1; min-width: 0; }
+  .char-avatar {
+    width: 30px; height: 30px; border-radius: 50%; object-fit: cover;
+    border: 1px solid var(--border); background: #e9f1f9; flex: none;
+    display: none;
+  }
+  .char-avatar.show { display: block; }
+  /* ba-timeline側のSTRIKER/SPECIAL区分バッジと同じ配色 */
+  .role-badge {
+    display: none;
+    flex: none;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 5px;
+    letter-spacing: 0.02em;
+  }
+  .role-badge.show { display: inline-block; }
+  .role-badge.striker { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #d13a3a; }
+  .role-badge.special { background: rgba(99,102,241,0.14); border: 1px solid rgba(99,102,241,0.4); color: #4f52c9; }
+  /* 入力したキャラの実際のロールが、そのスロット(ストライカー/スペシャル)と食い違う場合の警告 */
+  .slot-input.mismatch input { border-color: #c0392b; background: #fdeeee; }
+  .slot-mismatch-note { font-size: 11px; color: #c0392b; display: none; }
+  .slot-mismatch-note.show { display: block; }
+  button {
+    font-size: 14px;
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+  }
+  button:hover { background: var(--accent-dark); }
+  button.ghost { background: #e6eef6; color: var(--text); }
+  button.ghost:hover { background: #d5e2ee; }
+  button.danger { background: none; color: #c0392b; padding: 4px 8px; font-size: 12px; }
+  button.danger:hover { background: #fdeeee; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar-bg { background: #e9f1f9; border-radius: 4px; height: 14px; min-width: 120px; overflow: hidden; }
+  .bar { background: linear-gradient(90deg, #2b8fd9, #64b5f0); height: 100%; border-radius: 4px; }
+  .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; }
+  .pill.Win { background: var(--win); }
+  .pill.Lose { background: var(--lose); }
+  .chips span {
+    display: inline-block; background: #eef4fa; border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 7px; margin: 1px 2px; font-size: 12px;
+  }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  .counts { font-size: 12px; color: var(--muted); margin-left: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>防御編成集計ツール</h1>
+  <span class="sub">戦術対抗戦の防御側の編成を手入力で記録・集計</span>
+</header>
+<main>
+  <section id="entry">
+    <h2>防御編成を入力</h2>
+    <div class="formrow">
+      <label>相手の名前</label>
+      <input type="text" id="oppName" size="16">
+      <label>防衛結果</label>
+      <select id="defResult">
+        <option value="">不明</option>
+        <option value="Win">Win (防衛成功)</option>
+        <option value="Lose">Lose (防衛失敗)</option>
+      </select>
+    </div>
+    <div class="chars-grid" id="charsGrid"></div>
+    <div class="formrow">
+      <button id="saveBtn">この編成を保存</button>
+      <button id="clearBtn" class="ghost">クリア</button>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section>
+    <h2>データのバックアップ</h2>
+    <p class="counts" style="margin:0 0 10px;">
+      データはこのブラウザ内(localStorage)にのみ保存されます。他の端末・ブラウザには引き継がれないので、
+      機種変更やブラウザデータ消去の前に「エクスポート」でバックアップを取ってください。
+    </p>
+    <div class="formrow">
+      <button id="exportBtn" class="ghost">エクスポート(JSONダウンロード)</button>
+      <button id="importBtn" class="ghost">インポート(JSONを読み込み)</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+    </div>
+  </section>
+
+  <section>
+    <h2>使用キャラ集計 <span class="counts" id="statTotal"></span></h2>
+    <div id="statsTable"></div>
+  </section>
+
+  <section>
+    <h2>ポジション別 使用キャラ集計</h2>
+    <div id="positionStatsTable"></div>
+  </section>
+
+  <section>
+    <h2>相手別の遭遇回数</h2>
+    <div id="oppTable"></div>
+  </section>
+
+  <section>
+    <h2>保存済み履歴</h2>
+    <div id="historyTable"></div>
+  </section>
+</main>
+
+<datalist id="chardict-striker"></datalist>
+<datalist id="chardict-special"></datalist>
+
+<script>
+"use strict";
+
+const SLOT_COUNT = 6;
+const STORAGE_KEY = 'defenseCompRecords'; // ブラウザのlocalStorageに保存(サーバー無しのVercel静的配信のため)
+const CHAR_SOURCE_URL = 'https://ba-timeline.vercel.app/characters.json'; // ba-timelineのキャラ一覧をブラウザから直接fetch(CORS許可済み)
+let dict = { names: [] };
+let records = [];
+let charImageByName = new Map(); // キャラ名 -> 画像URL(ba-timelineと共有)
+let charRoleByName = new Map();  // キャラ名 -> role("special"/"striker"/"")。ba-timelineのSTRIKER/SPECIAL区分と同じ扱い
+
+// ---------- データ永続化(localStorage) ----------
+function loadRecords() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecords(list) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+// ba-timeline側の isStrikerSlot / KNOWN_SPECIALS と同じ判定:
+// role === "special" のみをSPECIAL扱いとし、それ以外(striker/未設定/未登録)はSTRIKER扱いにする。
+function isSpecialRole(name) {
+  return charRoleByName.get(normalizeName(name)) === 'special';
+}
+function isSpecialSlotIndex(i) {
+  return i >= 4; // 0-3: ストライカー1-4, 4-5: スペシャル1-2
+}
+
+// ---------- ユーティリティ ----------
+const $ = (id) => document.getElementById(id);
+
+function normalizeName(s) {
+  return s
+    .replace(/\s+/g, '')
+    .replace(/\(/g, '（').replace(/\)/g, '）')
+    .replace(/[*✱✳×]/g, '＊')
+    .trim();
+}
+
+function setStatus(msg, isError = false) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = isError ? 'error' : '';
+}
+
+// ---------- 入力フォーム ----------
+const SLOT_LABELS = ['ストライカー1', 'ストライカー2', 'ストライカー3', 'ストライカー4', 'スペシャル1', 'スペシャル2'];
+
+function initCharsGrid() {
+  const grid = $('charsGrid');
+  grid.innerHTML = '';
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    const label = document.createElement('span');
+    label.textContent = SLOT_LABELS[i];
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'slot-input';
+    const avatar = document.createElement('img');
+    avatar.className = 'char-avatar';
+    avatar.alt = '';
+    const badge = document.createElement('span');
+    // スロットの位置(ストライカー1-4/スペシャル1-2)に合わせた既定バッジ。実キャラのroleと食い違えば syncAvatar が上書きする
+    badge.className = 'role-badge ' + (isSpecialSlotIndex(i) ? 'special' : 'striker');
+    badge.textContent = isSpecialSlotIndex(i) ? 'SPE' : 'STR';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('list', isSpecialSlotIndex(i) ? 'chardict-special' : 'chardict-striker');
+    input.dataset.slotIndex = String(i);
+    input.addEventListener('input', () => syncAvatar(input));
+    inputWrap.append(avatar, badge, input);
+    const mismatchNote = document.createElement('div');
+    mismatchNote.className = 'slot-mismatch-note';
+    mismatchNote.textContent = isSpecialSlotIndex(i) ? '⚠ ストライカーのキャラです' : '⚠ スペシャルのキャラです';
+    slot.append(label, inputWrap, mismatchNote);
+    grid.append(slot);
+  }
+}
+
+// 入力欄の値がキャラ辞書と一致したら、隣に顔アイコン・ロールバッジを表示し、
+// スロット(ストライカー/スペシャル)と実際のロールが食い違っていれば警告する
+function syncAvatar(input) {
+  const inputWrap = input.parentElement;
+  const avatar = inputWrap.querySelector('.char-avatar');
+  const badge = inputWrap.querySelector('.role-badge');
+  const mismatchNote = inputWrap.nextElementSibling;
+  const name = normalizeName(input.value);
+  const image = charImageByName.get(name);
+  if (image) {
+    avatar.src = image;
+    avatar.classList.add('show');
+  } else {
+    avatar.classList.remove('show');
+    avatar.src = '';
+  }
+
+  const i = Number(input.dataset.slotIndex);
+  const known = charRoleByName.has(name);
+  let mismatch = false;
+  if (name && known) {
+    const actualSpecial = isSpecialRole(name);
+    mismatch = actualSpecial !== isSpecialSlotIndex(i);
+    badge.className = 'role-badge show ' + (actualSpecial ? 'special' : 'striker');
+    badge.textContent = actualSpecial ? 'SPE' : 'STR';
+  } else {
+    badge.classList.remove('show');
+  }
+  inputWrap.classList.toggle('mismatch', mismatch);
+  mismatchNote.classList.toggle('show', mismatch);
+}
+
+function syncAllAvatars() {
+  for (const input of $('charsGrid').querySelectorAll('input')) syncAvatar(input);
+}
+
+function clearEntry() {
+  $('oppName').value = '';
+  $('defResult').value = '';
+  for (const input of $('charsGrid').querySelectorAll('input')) input.value = '';
+  syncAllAvatars();
+  $('oppName').focus();
+  setStatus('');
+}
+
+// ---------- 保存 ----------
+async function saveRecord() {
+  const characters = [...$('charsGrid').querySelectorAll('input')]
+    .map((i) => normalizeName(i.value))
+    .filter(Boolean);
+  if (!characters.length) return setStatus('キャラ名が入っていません。', true);
+
+  const opponent = { name: $('oppName').value.trim() };
+
+  // 重複チェックは保存を止めない(「匿名」など同名が被っても別記録として残す)。
+  // 同じ相手名+同じ編成が既にあれば、保存はした上で通知だけする。
+  const key = (chars) => [...chars].sort().join('|');
+  const dup = records.some((r) => r.opponent.name === opponent.name && key(r.characters) === key(characters));
+
+  const record = {
+    id: crypto.randomUUID(),
+    savedAt: new Date().toISOString(),
+    opponent,
+    defenseResult: $('defResult').value || null,
+    characters,
+  };
+  records.push(record);
+  saveRecords(records);
+  await refresh();
+  clearEntry();
+  setStatus(dup ? '保存しました(同じ相手・同じ編成の記録が既にありました)。' : '保存しました。');
+}
+
+// ---------- 表示 ----------
+async function refresh() {
+  records = loadRecords();
+
+  // ba-timelineのキャラ一覧をブラウザから直接取得(サーバーを挟まない)。
+  // 取れなくても保存済みレコードの名前だけで動作は継続する。
+  let characters = [];
+  try {
+    const res = await fetch(CHAR_SOURCE_URL);
+    if (res.ok) characters = await res.json();
+  } catch (e) {
+    console.error('キャラ一覧の取得に失敗:', e);
+  }
+  const names = new Set(characters.map((c) => c.name));
+  for (const r of records) {
+    for (const name of r.characters || []) if (name) names.add(name);
+  }
+  dict = { names: [...names] };
+  charImageByName = new Map(characters.map((c) => [c.name, c.image]));
+  charRoleByName = new Map(characters.map((c) => [c.name, c.role || '']));
+  syncAllAvatars();
+
+  // ストライカー/スペシャルのスロットごとに候補を分ける(ba-timelineの編成編集モーダルと同じ区分)。
+  // ba-timelineにまだ無い名前(保存済み履歴だけにある名前)はroleが分からないため、
+  // ストライカー側の候補にだけ入れておく(誤って隠さないためのフォールバック)。
+  const dlStriker = $('chardict-striker');
+  const dlSpecial = $('chardict-special');
+  dlStriker.innerHTML = '';
+  dlSpecial.innerHTML = '';
+  for (const n of [...dict.names].sort((a, b) => a.localeCompare(b, 'ja'))) {
+    const opt = document.createElement('option');
+    opt.value = n;
+    (isSpecialRole(n) ? dlSpecial : dlStriker).append(opt);
+  }
+  renderStats();
+  renderPositionStats();
+  renderOpponents();
+  renderHistory();
+}
+
+function renderStats() {
+  const total = records.length;
+  $('statTotal').textContent = total ? `全${total}件の防御編成` : '';
+  if (!total) {
+    $('statsTable').innerHTML = '<div class="empty">まだデータがありません。編成を入力して保存すると集計されます。</div>';
+    return;
+  }
+  const counts = new Map();
+  for (const r of records) {
+    for (const c of new Set(r.characters)) counts.set(c, (counts.get(c) || 0) + 1);
+  }
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
+  const max = rows[0][1];
+  $('statsTable').innerHTML = `
+    <table>
+      <thead><tr><th>キャラ</th><th style="width:70px;text-align:right">回数</th><th style="width:80px;text-align:right">採用率</th><th></th></tr></thead>
+      <tbody>${rows.map(([name, n]) => `
+        <tr>
+          <td>${esc(name)}</td>
+          <td class="num">${n}</td>
+          <td class="num">${(n / total * 100).toFixed(1)}%</td>
+          <td><div class="bar-bg"><div class="bar" style="width:${(n / max * 100).toFixed(1)}%"></div></div></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderPositionStats() {
+  const total = records.length;
+  const container = $('positionStatsTable');
+
+  if (!total) {
+    container.innerHTML = '<div class="empty">まだデータがありません。</div>';
+    return;
+  }
+
+  // ポジション(ストライカー1-4、スペシャル1-2)ごとのキャラ使用回数を集計
+  const positionCounts = Array.from({ length: SLOT_COUNT }, () => new Map());
+  for (const r of records) {
+    for (let i = 0; i < r.characters.length && i < SLOT_COUNT; i++) {
+      const char = r.characters[i];
+      const counts = positionCounts[i];
+      counts.set(char, (counts.get(char) || 0) + 1);
+    }
+  }
+
+  let html = '<div class="chars-grid">'; // 既存のグリッドスタイルを流用
+  positionCounts.forEach((counts, i) => {
+    const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
+    html += `<div><h3>${SLOT_LABELS[i]}</h3><table>`;
+    if (rows.length === 0) {
+      html += '<tr><td>データなし</td></tr>';
+    } else {
+      html += rows.map(([name, n]) => `<tr><td>${esc(name)}</td><td class="num">${n}回</td></tr>`).join('');
+    }
+    html += '</table></div>';
+  });
+  container.innerHTML = html + '</div>';
+}
+
+function renderOpponents() {
+  if (!records.length) {
+    $('oppTable').innerHTML = '<div class="empty">まだデータがありません。</div>';
+    return;
+  }
+  const counts = new Map();
+  for (const r of records) {
+    const label = r.opponent.name || '(名前なし)';
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  $('oppTable').innerHTML = `
+    <table>
+      <thead><tr><th>相手</th><th style="width:80px;text-align:right">遭遇回数</th></tr></thead>
+      <tbody>${rows.map(([name, n]) => `<tr><td>${esc(name)}</td><td class="num">${n}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function renderHistory() {
+  if (!records.length) {
+    $('historyTable').innerHTML = '<div class="empty">まだデータがありません。</div>';
+    return;
+  }
+  const rows = [...records].reverse();
+  $('historyTable').innerHTML = `
+    <table>
+      <thead><tr><th style="width:130px">日時</th><th style="width:150px">相手</th><th style="width:60px">結果</th><th>防御編成</th><th style="width:60px"></th></tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr>
+          <td>${new Date(r.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+          <td>${esc(r.opponent.name)}</td>
+          <td>${r.defenseResult ? `<span class="pill ${r.defenseResult}">${r.defenseResult}</span>` : '－'}</td>
+          <td class="chips">${r.characters.map((c) => `<span>${esc(c)}</span>`).join('')}</td>
+          <td><button class="danger" data-del="${r.id}">削除</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  $('historyTable').querySelectorAll('[data-del]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('この記録を削除しますか？')) return;
+      records = records.filter((r) => r.id !== btn.dataset.del);
+      saveRecords(records);
+      await refresh();
+    });
+  });
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---------- バックアップ(エクスポート/インポート) ----------
+function exportRecords() {
+  const blob = new Blob([JSON.stringify({ records }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `防御編成集計_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 旧ローカルサーバー版のdata.json({records:[...]})と、エクスポート済みJSONの両方を受け付ける。
+// 既存データとはid重複を除いてマージする(同じファイルを二重インポートしても増えない)。
+async function importRecords(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch (e) {
+    return setStatus('JSONの読み込みに失敗しました: ' + e.message, true);
+  }
+  const incoming = Array.isArray(parsed) ? parsed : parsed.records;
+  if (!Array.isArray(incoming)) return setStatus('records配列が見つかりません。', true);
+
+  const existingIds = new Set(records.map((r) => r.id));
+  let added = 0;
+  for (const r of incoming) {
+    if (!r || !Array.isArray(r.characters) || !r.characters.length) continue;
+    const id = r.id && !existingIds.has(r.id) ? r.id : crypto.randomUUID();
+    existingIds.add(id);
+    records.push({
+      id,
+      savedAt: r.savedAt || new Date().toISOString(),
+      opponent: { name: String(r.opponent?.name ?? '').trim() },
+      defenseResult: r.defenseResult === 'Win' || r.defenseResult === 'Lose' ? r.defenseResult : null,
+      characters: r.characters.map((c) => String(c).trim()).filter(Boolean),
+    });
+    added++;
+  }
+  saveRecords(records);
+  await refresh();
+  setStatus(`${added}件を読み込みました。`);
+}
+
+// ---------- 入力イベント ----------
+$('saveBtn').addEventListener('click', saveRecord);
+$('clearBtn').addEventListener('click', clearEntry);
+$('exportBtn').addEventListener('click', exportRecords);
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', () => {
+  const file = $('importFile').files[0];
+  if (file) importRecords(file);
+  $('importFile').value = '';
+});
+
+initCharsGrid();
+refresh();
+</script>
+</body>
+</html>
