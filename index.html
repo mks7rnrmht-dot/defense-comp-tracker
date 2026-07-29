@@ -141,6 +141,14 @@
   button.ghost:hover { background: #d5e2ee; }
   button.danger { background: none; color: #c0392b; padding: 4px 8px; font-size: 12px; }
   button.danger:hover { background: #fdeeee; }
+  /* 履歴の行内ボタン(編集・削除)。縦に細く積んで列幅を取らないようにする */
+  .row-actions { white-space: nowrap; }
+  button.rowbtn { background: none; color: var(--accent-dark); padding: 3px 6px; font-size: 12px; }
+  button.rowbtn:hover { background: #eef4fa; }
+  button.rowbtn.danger { color: #c0392b; }
+  button.rowbtn.danger:hover { background: #fdeeee; }
+  tr.editing-row { background: #fff8e6; }        /* 編集中の行を目立たせる */
+  #editNote { font-size: 12px; color: #b06a00; }
   /* 全削除は取り消せないので、他のボタンと明確に見分けがつく色にする */
   button.danger-btn { background: #fdeeee; color: #c0392b; border: 1px solid #f0c4c0; margin-left: auto; }
   button.danger-btn:hover { background: #f9dcda; }
@@ -221,6 +229,8 @@
     <div class="formrow">
       <button id="saveBtn">この編成を保存</button>
       <button id="clearBtn" class="ghost">クリア</button>
+      <span id="editNote" hidden>保存済みの記録を編集中です</span>
+      <button id="cancelEditBtn" class="ghost" hidden>編集をやめる</button>
     </div>
     <div id="status"></div>
   </section>
@@ -296,6 +306,7 @@ let currentMode = 'oppAttack';
 let dict = { names: [] };
 let records = [];
 let myTeamDefaults = { defense: [], attack: [] }; // 自分側の入力補助用デフォルト(入力するたび自動保存)
+let editingId = null; // 編集中レコードのid(nullなら新規入力モード)
 let charImageByName = new Map(); // キャラ名 -> 画像URL(ba-timelineと共有)
 let charRoleByName = new Map();  // キャラ名 -> role("special"/"striker"/"")。ba-timelineのSTRIKER/SPECIAL区分と同じ扱い
 
@@ -529,7 +540,10 @@ function syncAllAvatars() {
 
 // 自分側の入力欄が変わるたびに既定値として自動保存する(次回以降の入力補助のため、
 // 明示的な保存操作は不要にしてある)。
+// ただし過去の記録を編集中は保存しない。昔の編成を直しただけで「普段使っている編成」の
+// 既定値が上書きされてしまうのを防ぐため。
 function persistMyTeamDefault() {
+  if (editingId) return;
   const key = MODE_CONFIG[currentMode].myTeamKey;
   myTeamDefaults[key] = gridInputs('myGridMain', 'myGridSp').map((i) => normalizeName(i.value));
   saveMyTeamDefaults();
@@ -558,6 +572,10 @@ function setMode(mode) {
   buildGrids('myGridMain', 'myGridSp', cfg.myLabels, persistMyTeamDefault);
   fillGrid('myGridMain', 'myGridSp', myTeamDefaults[cfg.myTeamKey]);
 
+  // モードを跨いだ編集は成立しないので、切り替え時は編集状態を解除する
+  // (startEditはこの後にeditingIdを立てるため影響を受けない)
+  editingId = null;
+  setEditUi(false);
   clearOpponentEntry();
   renderAll();
 }
@@ -569,6 +587,21 @@ async function saveRecord() {
   const myChars = gridInputs('myGridMain', 'myGridSp').map((i) => normalizeName(i.value)).filter(Boolean);
 
   const opponent = { name: $('oppName').value.trim() };
+  const defenseResult = $('defResult').value || null;
+
+  // 編集モード: 既存レコードを上書きする(id・保存日時は元のまま維持し、履歴の並びを動かさない)
+  if (editingId) {
+    const target = records.find((r) => r.id === editingId);
+    if (!target) { // 別タブで消された等
+      cancelEdit();
+      return setStatus('編集対象の記録が見つかりませんでした。', true);
+    }
+    Object.assign(target, { kind: currentMode, opponent, defenseResult, characters: opponentChars, myCharacters: myChars });
+    saveRecords(records);
+    finishEdit();          // 自分の編成欄は通常運用の既定値に戻す
+    await refresh();
+    return setStatus('記録を更新しました。');
+  }
 
   // 重複チェックは保存を止めない(「匿名」など同名が被っても別記録として残す)。
   // 同じモード・同じ相手名+同じ編成が既にあれば、保存はした上で通知だけする。
@@ -583,7 +616,7 @@ async function saveRecord() {
     savedAt: new Date().toISOString(),
     kind: currentMode,
     opponent,
-    defenseResult: $('defResult').value || null,
+    defenseResult,
     characters: opponentChars,
     myCharacters: myChars,
   };
@@ -593,6 +626,48 @@ async function saveRecord() {
   await refresh();
   clearOpponentEntry(); // 相手側だけクリアする。自分の編成は使い回すため残す
   setStatus(dup ? '保存しました(同じ相手・同じ編成の記録が既にありました)。' : '保存しました。');
+}
+
+// ---------- 保存済み記録の編集 ----------
+// 専用の編集UIは作らず、既存の入力フォームに読み込んで上書き保存する方式にしている。
+function startEdit(id) {
+  const rec = records.find((r) => r.id === id);
+  if (!rec) return;
+
+  // 記録のモードと画面のモードが違えばラベルが噛み合わないので合わせる。
+  // setModeはフォームを初期化するので、値の流し込みは必ずこの後に行う。
+  if ((rec.kind || 'oppAttack') !== currentMode) setMode(rec.kind || 'oppAttack');
+
+  editingId = id;
+  $('oppName').value = rec.opponent.name || '';
+  $('defResult').value = rec.defenseResult || '';
+  fillGrid('oppGridMain', 'oppGridSp', rec.characters);
+  fillGrid('myGridMain', 'myGridSp', rec.myCharacters || []);
+  setEditUi(true);
+  renderAll();                                    // 編集中の行にマーカーを付ける
+  $('entry').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setStatus('編集中です。内容を直して「変更を保存」を押してください。');
+}
+
+// 編集をやめてフォームを通常状態に戻す(自分の編成欄は普段の既定値へ)
+function finishEdit() {
+  editingId = null;
+  setEditUi(false);
+  fillGrid('myGridMain', 'myGridSp', myTeamDefaults[MODE_CONFIG[currentMode].myTeamKey]);
+  clearOpponentEntry();
+}
+
+function cancelEdit() {
+  if (!editingId) return;
+  finishEdit();
+  renderAll();
+  setStatus('編集をやめました。');
+}
+
+function setEditUi(on) {
+  $('saveBtn').textContent = on ? '変更を保存' : 'この編成を保存';
+  $('editNote').hidden = !on;
+  $('cancelEditBtn').hidden = !on;
 }
 
 // ---------- 表示 ----------
@@ -758,9 +833,9 @@ function renderHistory(list) {
   const rows = [...list].reverse();
   $('historyTable').innerHTML = `
     <table>
-      <thead><tr><th style="width:96px">日時</th><th style="width:110px">相手</th><th style="width:56px">結果</th><th>相手の編成 / 自分の編成</th><th style="width:56px"></th></tr></thead>
+      <thead><tr><th style="width:96px">日時</th><th style="width:110px">相手</th><th style="width:56px">結果</th><th>相手の編成 / 自分の編成</th><th style="width:64px"></th></tr></thead>
       <tbody>${rows.map((r) => `
-        <tr>
+        <tr${r.id === editingId ? ' class="editing-row"' : ''}>
           <td>${new Date(r.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
           <td>${esc(r.opponent.name)}</td>
           <td>${r.defenseResult ? `<span class="pill ${r.defenseResult}">${r.defenseResult}</span>` : '－'}</td>
@@ -768,13 +843,20 @@ function renderHistory(list) {
             <div class="chips"><span class="chips-label">相手</span>${r.characters.map(charChipHtml).join('')}</div>
             <div class="chips"><span class="chips-label">自分</span>${(r.myCharacters && r.myCharacters.length) ? r.myCharacters.map(charChipHtml).join('') : '<span class="empty" style="padding:0;display:inline;">(未入力)</span>'}</div>
           </td>
-          <td><button class="danger" data-del="${r.id}">削除</button></td>
+          <td class="row-actions">
+            <button class="rowbtn" data-edit="${r.id}">編集</button>
+            <button class="rowbtn danger" data-del="${r.id}">削除</button>
+          </td>
         </tr>`).join('')}
       </tbody>
     </table>`;
+  $('historyTable').querySelectorAll('[data-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => startEdit(btn.dataset.edit));
+  });
   $('historyTable').querySelectorAll('[data-del]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!confirm('この記録を削除しますか？')) return;
+      if (btn.dataset.del === editingId) cancelEdit(); // 編集中の行が消えたらフォームも戻す
       records = records.filter((r) => r.id !== btn.dataset.del);
       saveRecords(records);
       await refresh();
@@ -809,6 +891,8 @@ async function deleteAllData() {
   localStorage.removeItem(MY_TEAMS_KEY);
   records = [];
   myTeamDefaults = { defense: [], attack: [] };
+  editingId = null;
+  setEditUi(false);
   await refresh();
   fillGrid('myGridMain', 'myGridSp', []); // 自分の編成欄も画面から消す
   clearOpponentEntry();
@@ -859,7 +943,10 @@ async function importRecords(file) {
 $('modeOppAttackBtn').addEventListener('click', () => setMode('oppAttack'));
 $('modeOppDefenseBtn').addEventListener('click', () => setMode('oppDefense'));
 $('saveBtn').addEventListener('click', saveRecord);
-$('clearBtn').addEventListener('click', clearOpponentEntry);
+// 「クリア」は編集中なら編集の取り消しも兼ねる(入力欄だけ空になって
+// 保存すると元の記録を空で上書きしてしまう、という事故を防ぐため)
+$('clearBtn').addEventListener('click', () => (editingId ? cancelEdit() : clearOpponentEntry()));
+$('cancelEditBtn').addEventListener('click', cancelEdit);
 $('exportBtn').addEventListener('click', exportRecords);
 $('importBtn').addEventListener('click', () => $('importFile').click());
 $('importFile').addEventListener('change', () => {
