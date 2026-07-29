@@ -62,5 +62,8 @@ node dev-server.js
 - `index.html` — アプリ本体(入力フォーム・localStorage永続化・集計・ba-timeline連携)
 - `dev-server.js` — ローカル確認用の最小静的サーバー(本番では使わない)
 - `vercel.json` — Vercelを静的サイトとして扱わせるための設定
+- `ogp.png` — SNS共有カード用のバナー画像(1200×630)。
+  盾アイコン＋タイトル＋説明文をHTMLで組み、headless Chromeの`--screenshot`で書き出したもの。
+  作り直す場合は同じ手順でこのサイズを維持すること(`<head>`の`og:image:width/height`と揃えるため)
 - `favicon.ico` / `apple-touch-icon.png` — タブ・ホーム画面用の盾アイコン
   (元画像を透明部分でトリミング→正方形化して生成。`.ico`は16〜256pxを同梱)
