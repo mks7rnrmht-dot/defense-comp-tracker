@@ -48,6 +48,7 @@
     border-left: 4px solid var(--accent);
     padding-left: 8px;
   }
+  h3.subhead { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
   #status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 18px; }
   #status.error { color: #c0392b; }
   .formrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -77,6 +78,9 @@
   .slot-input.mismatch input { border-color: #c0392b; background: #fdeeee; }
   .slot-mismatch-note { font-size: 11px; color: #c0392b; display: none; }
   .slot-mismatch-note.show { display: block; }
+  .mode-toggle { margin-bottom: 14px; }
+  .my-teams-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 720px) { .my-teams-grid { grid-template-columns: 1fr; } }
   button {
     font-size: 14px;
     padding: 8px 20px;
@@ -111,15 +115,19 @@
 <body>
 <header>
   <h1>防御編成集計ツール</h1>
-  <span class="sub">戦術対抗戦の防御側の編成を手入力で記録・集計</span>
+  <span class="sub">戦術対抗戦の相手編成・自分編成を記録して集計</span>
 </header>
 <main>
   <section id="entry">
-    <h2>防御編成を入力</h2>
+    <div class="mode-toggle formrow">
+      <button id="modeOppAttackBtn">相手の攻撃編成を記録</button>
+      <button id="modeOppDefenseBtn" class="ghost">相手の防衛編成を記録</button>
+    </div>
+    <h2 id="entryTitle">相手の攻撃編成を入力</h2>
     <div class="formrow">
       <label>相手の名前</label>
       <input type="text" id="oppName" size="16">
-      <label>防衛結果</label>
+      <label id="resultLabel">防衛結果</label>
       <select id="defResult">
         <option value="">不明</option>
         <option value="Win">Win (防衛成功)</option>
@@ -132,6 +140,23 @@
       <button id="clearBtn" class="ghost">クリア</button>
     </div>
     <div id="status"></div>
+  </section>
+
+  <section id="myTeams">
+    <h2>自分の編成</h2>
+    <p class="counts" style="margin:0 0 14px;">対戦相手とは無関係の、自分が今使っている編成のメモです(保存は1件のみ・上書き)。</p>
+    <div class="my-teams-grid">
+      <div>
+        <h3 class="subhead">自分の防衛編成</h3>
+        <div class="chars-grid" id="myDefenseGrid"></div>
+        <button id="saveMyDefenseBtn" class="ghost">自分の防衛編成を保存</button>
+      </div>
+      <div>
+        <h3 class="subhead">自分の攻撃編成</h3>
+        <div class="chars-grid" id="myAttackGrid"></div>
+        <button id="saveMyAttackBtn" class="ghost">自分の攻撃編成を保存</button>
+      </div>
+    </div>
   </section>
 
   <section>
@@ -148,22 +173,22 @@
   </section>
 
   <section>
-    <h2>使用キャラ集計 <span class="counts" id="statTotal"></span></h2>
+    <h2><span id="statsTitle">使用キャラ集計</span> <span class="counts" id="statTotal"></span></h2>
     <div id="statsTable"></div>
   </section>
 
   <section>
-    <h2>ポジション別 使用キャラ集計</h2>
+    <h2 id="positionStatsTitle">ポジション別 使用キャラ集計</h2>
     <div id="positionStatsTable"></div>
   </section>
 
   <section>
-    <h2>相手別の遭遇回数</h2>
+    <h2 id="oppTitle">相手別の遭遇回数</h2>
     <div id="oppTable"></div>
   </section>
 
   <section>
-    <h2>保存済み履歴</h2>
+    <h2 id="historyTitle">保存済み履歴</h2>
     <div id="historyTable"></div>
   </section>
 </main>
@@ -176,9 +201,34 @@
 
 const SLOT_COUNT = 6;
 const STORAGE_KEY = 'defenseCompRecords'; // ブラウザのlocalStorageに保存(サーバー無しのVercel静的配信のため)
+const MY_TEAMS_KEY = 'defenseCompMyTeams';
 const CHAR_SOURCE_URL = 'https://ba-timeline.vercel.app/characters.json'; // ba-timelineのキャラ一覧をブラウザから直接fetch(CORS許可済み)
+
+// 相手の防衛編成(自分が攻撃する側)と、相手の攻撃編成(自分が防衛する側)でモードを分ける。
+// このツールは元々「相手の攻撃編成を調べる」用途で作られていたため、既定・旧データのkind無しはoppAttack扱い。
+const MODE_CONFIG = {
+  oppAttack: {
+    title: '相手の攻撃編成',
+    slotLabels: ['A1', 'A2', 'A3', 'A4', 'SP1', 'SP2'],
+    resultLabel: '防衛結果',
+    winText: 'Win (防衛成功)',
+    loseText: 'Lose (防衛失敗)',
+  },
+  oppDefense: {
+    title: '相手の防衛編成',
+    slotLabels: ['D1', 'D2', 'D3', 'D4', 'SP1', 'SP2'],
+    resultLabel: '攻略結果',
+    winText: 'Win (攻略成功)',
+    loseText: 'Lose (攻略失敗)',
+  },
+};
+const MY_DEFENSE_LABELS = ['D1', 'D2', 'D3', 'D4', 'SP1', 'SP2'];
+const MY_ATTACK_LABELS = ['A1', 'A2', 'A3', 'A4', 'SP1', 'SP2'];
+let currentMode = 'oppAttack';
+
 let dict = { names: [] };
 let records = [];
+let myTeams = { defense: [], attack: [] };
 let charImageByName = new Map(); // キャラ名 -> 画像URL(ba-timelineと共有)
 let charRoleByName = new Map();  // キャラ名 -> role("special"/"striker"/"")。ba-timelineのSTRIKER/SPECIAL区分と同じ扱い
 
@@ -186,7 +236,9 @@ let charRoleByName = new Map();  // キャラ名 -> role("special"/"striker"/"")
 function loadRecords() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = raw ? JSON.parse(raw) : [];
+    // kind未設定の旧データ(モード分割前に保存したもの)はoppAttack扱いにする
+    return list.map((r) => ({ kind: 'oppAttack', ...r }));
   } catch {
     return [];
   }
@@ -196,13 +248,27 @@ function saveRecords(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
+function loadMyTeams() {
+  try {
+    const raw = localStorage.getItem(MY_TEAMS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return { defense: parsed.defense || [], attack: parsed.attack || [] };
+  } catch {
+    return { defense: [], attack: [] };
+  }
+}
+
+function saveMyTeams(teams) {
+  localStorage.setItem(MY_TEAMS_KEY, JSON.stringify(teams));
+}
+
 // ba-timeline側の isStrikerSlot / KNOWN_SPECIALS と同じ判定:
 // role === "special" のみをSPECIAL扱いとし、それ以外(striker/未設定/未登録)はSTRIKER扱いにする。
 function isSpecialRole(name) {
   return charRoleByName.get(normalizeName(name)) === 'special';
 }
 function isSpecialSlotIndex(i) {
-  return i >= 4; // 0-3: ストライカー1-4, 4-5: スペシャル1-2
+  return i >= 4; // 0-3: 1-4番目, 4-5: SP1-2
 }
 
 // ---------- ユーティリティ ----------
@@ -222,35 +288,54 @@ function setStatus(msg, isError = false) {
   el.className = isError ? 'error' : '';
 }
 
-// ---------- 入力フォーム ----------
-const SLOT_LABELS = ['ストライカー1', 'ストライカー2', 'ストライカー3', 'ストライカー4', 'スペシャル1', 'スペシャル2'];
-const POSITION_SHORT_LABELS = ['D1', 'D2', 'D3', 'D4', 'SP1', 'SP2']; // ポジション別集計の表記
+// ---------- 入力フォーム(共通スロットUI) ----------
+// 1スロット分(ラベル・顔アイコン・入力欄・役割食い違い警告)を組み立てる。
+// 相手編成入力・自分編成入力のどちらでも使い回す。
+function buildCharSlot(labelText, i) {
+  const slot = document.createElement('div');
+  slot.className = 'slot';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  const inputWrap = document.createElement('div');
+  inputWrap.className = 'slot-input';
+  const avatar = document.createElement('img');
+  avatar.className = 'char-avatar';
+  avatar.alt = '';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.setAttribute('list', isSpecialSlotIndex(i) ? 'chardict-special' : 'chardict-striker');
+  input.addEventListener('input', () => syncAvatar(input));
+  inputWrap.append(avatar, input);
+  const mismatchNote = document.createElement('div');
+  mismatchNote.className = 'slot-mismatch-note';
+  mismatchNote.textContent = isSpecialSlotIndex(i) ? '⚠ ストライカーのキャラです' : '⚠ スペシャルのキャラです';
+  slot.append(label, inputWrap, mismatchNote);
+  return slot;
+}
+
+function buildGridInto(containerId, labels) {
+  const grid = $(containerId);
+  grid.innerHTML = '';
+  for (let i = 0; i < SLOT_COUNT; i++) grid.append(buildCharSlot(labels[i], i));
+}
 
 function initCharsGrid() {
-  const grid = $('charsGrid');
-  grid.innerHTML = '';
-  for (let i = 0; i < SLOT_COUNT; i++) {
-    const slot = document.createElement('div');
-    slot.className = 'slot';
-    const label = document.createElement('span');
-    label.textContent = SLOT_LABELS[i];
-    const inputWrap = document.createElement('div');
-    inputWrap.className = 'slot-input';
-    const avatar = document.createElement('img');
-    avatar.className = 'char-avatar';
-    avatar.alt = '';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.setAttribute('list', isSpecialSlotIndex(i) ? 'chardict-special' : 'chardict-striker');
-    input.dataset.slotIndex = String(i);
-    input.addEventListener('input', () => syncAvatar(input));
-    inputWrap.append(avatar, input);
-    const mismatchNote = document.createElement('div');
-    mismatchNote.className = 'slot-mismatch-note';
-    mismatchNote.textContent = isSpecialSlotIndex(i) ? '⚠ ストライカーのキャラです' : '⚠ スペシャルのキャラです';
-    slot.append(label, inputWrap, mismatchNote);
-    grid.append(slot);
-  }
+  buildGridInto('charsGrid', MODE_CONFIG[currentMode].slotLabels);
+}
+
+function initMyTeamsGrids() {
+  buildGridInto('myDefenseGrid', MY_DEFENSE_LABELS);
+  buildGridInto('myAttackGrid', MY_ATTACK_LABELS);
+  fillGridInputs('myDefenseGrid', myTeams.defense);
+  fillGridInputs('myAttackGrid', myTeams.attack);
+}
+
+function fillGridInputs(containerId, values) {
+  const inputs = $(containerId).querySelectorAll('input');
+  inputs.forEach((input, i) => {
+    input.value = (values && values[i]) || '';
+    syncAvatar(input);
+  });
 }
 
 // 入力欄の値がキャラ辞書と一致したら隣に顔アイコンを表示し、
@@ -269,7 +354,8 @@ function syncAvatar(input) {
     avatar.src = '';
   }
 
-  const i = Number(input.dataset.slotIndex);
+  const slot = inputWrap.parentElement;
+  const i = [...slot.parentElement.children].indexOf(slot);
   const known = charRoleByName.has(name);
   const mismatch = name && known && isSpecialRole(name) !== isSpecialSlotIndex(i);
   inputWrap.classList.toggle('mismatch', mismatch);
@@ -277,7 +363,7 @@ function syncAvatar(input) {
 }
 
 function syncAllAvatars() {
-  for (const input of $('charsGrid').querySelectorAll('input')) syncAvatar(input);
+  for (const input of document.querySelectorAll('.chars-grid input')) syncAvatar(input);
 }
 
 function clearEntry() {
@@ -289,7 +375,24 @@ function clearEntry() {
   setStatus('');
 }
 
-// ---------- 保存 ----------
+// ---------- モード切り替え(相手の攻撃編成 / 相手の防衛編成) ----------
+function setMode(mode) {
+  currentMode = mode;
+  const cfg = MODE_CONFIG[mode];
+  $('modeOppAttackBtn').classList.toggle('ghost', mode !== 'oppAttack');
+  $('modeOppDefenseBtn').classList.toggle('ghost', mode !== 'oppDefense');
+  $('entryTitle').textContent = `${cfg.title}を入力`;
+  $('resultLabel').textContent = cfg.resultLabel;
+  const opts = $('defResult').options;
+  opts[1].textContent = cfg.winText;
+  opts[2].textContent = cfg.loseText;
+  clearEntry();
+  initCharsGrid();
+  syncAllAvatars();
+  renderAll();
+}
+
+// ---------- 保存(相手編成) ----------
 async function saveRecord() {
   const characters = [...$('charsGrid').querySelectorAll('input')]
     .map((i) => normalizeName(i.value))
@@ -299,13 +402,17 @@ async function saveRecord() {
   const opponent = { name: $('oppName').value.trim() };
 
   // 重複チェックは保存を止めない(「匿名」など同名が被っても別記録として残す)。
-  // 同じ相手名+同じ編成が既にあれば、保存はした上で通知だけする。
+  // 同じモード・同じ相手名+同じ編成が既にあれば、保存はした上で通知だけする。
   const key = (chars) => [...chars].sort().join('|');
-  const dup = records.some((r) => r.opponent.name === opponent.name && key(r.characters) === key(characters));
+  const dup = records.some((r) =>
+    (r.kind || 'oppAttack') === currentMode &&
+    r.opponent.name === opponent.name &&
+    key(r.characters) === key(characters));
 
   const record = {
     id: crypto.randomUUID(),
     savedAt: new Date().toISOString(),
+    kind: currentMode,
     opponent,
     defenseResult: $('defResult').value || null,
     characters,
@@ -317,9 +424,18 @@ async function saveRecord() {
   setStatus(dup ? '保存しました(同じ相手・同じ編成の記録が既にありました)。' : '保存しました。');
 }
 
+// ---------- 保存(自分の編成) ----------
+function saveMyTeam(containerId, teamKey) {
+  const values = [...$(containerId).querySelectorAll('input')].map((i) => normalizeName(i.value));
+  myTeams[teamKey] = values;
+  saveMyTeams(myTeams);
+  setStatus('自分の編成を保存しました。');
+}
+
 // ---------- 表示 ----------
 async function refresh() {
   records = loadRecords();
+  myTeams = loadMyTeams();
 
   // ba-timelineのキャラ一覧をブラウザから直接取得(サーバーを挟まない)。
   // 取れなくても保存済みレコードの名前だけで動作は継続する。
@@ -330,18 +446,19 @@ async function refresh() {
   } catch (e) {
     console.error('キャラ一覧の取得に失敗:', e);
   }
-  const names = new Set(characters.map((c) => c.name));
+  // ba-timeline側の名前は半角括弧("アヤネ(水着)")、こちらの保存データは
+  // normalizeNameで全角括弧に統一している。ここで揃えないと衣装違いキャラの
+  // 画像がほぼ全部マッチしなくなる(過去の不具合の原因)。
+  const charBase = new URL(CHAR_SOURCE_URL).origin;
+  const normalizedChars = characters.map((c) => ({ ...c, name: normalizeName(c.name) }));
+
+  const names = new Set(normalizedChars.map((c) => c.name));
   for (const r of records) {
     for (const name of r.characters || []) if (name) names.add(name);
   }
   dict = { names: [...names] };
-  // image はba-timeline側では"/characters/xxx.png"という相対パスなので、
-  // このサイト自身のオリジンに対して解決されてしまわないようba-timelineの
-  // オリジンを明示的に付ける
-  const charBase = new URL(CHAR_SOURCE_URL).origin;
-  charImageByName = new Map(characters.map((c) => [c.name, charBase + c.image]));
-  charRoleByName = new Map(characters.map((c) => [c.name, c.role || '']));
-  syncAllAvatars();
+  charImageByName = new Map(normalizedChars.map((c) => [c.name, charBase + c.image]));
+  charRoleByName = new Map(normalizedChars.map((c) => [c.name, c.role || '']));
 
   // ストライカー/スペシャルのスロットごとに候補を分ける(ba-timelineの編成編集モーダルと同じ区分)。
   // ba-timelineにまだ無い名前(保存済み履歴だけにある名前)はroleが分からないため、
@@ -355,21 +472,35 @@ async function refresh() {
     opt.value = n;
     (isSpecialRole(n) ? dlSpecial : dlStriker).append(opt);
   }
-  renderStats();
-  renderPositionStats();
-  renderOpponents();
-  renderHistory();
+
+  if (!$('myDefenseGrid').children.length) initMyTeamsGrids();
+  else { fillGridInputs('myDefenseGrid', myTeams.defense); fillGridInputs('myAttackGrid', myTeams.attack); }
+  syncAllAvatars();
+  renderAll();
 }
 
-function renderStats() {
-  const total = records.length;
-  $('statTotal').textContent = total ? `全${total}件の防御編成` : '';
+function renderAll() {
+  const cfg = MODE_CONFIG[currentMode];
+  const scoped = records.filter((r) => (r.kind || 'oppAttack') === currentMode);
+  $('statsTitle').textContent = `使用キャラ集計(${cfg.title})`;
+  $('positionStatsTitle').textContent = `ポジション別 使用キャラ集計(${cfg.title})`;
+  $('oppTitle').textContent = `相手別の遭遇回数(${cfg.title})`;
+  $('historyTitle').textContent = `保存済み履歴(${cfg.title})`;
+  renderStats(scoped);
+  renderPositionStats(scoped, cfg.slotLabels);
+  renderOpponents(scoped);
+  renderHistory(scoped);
+}
+
+function renderStats(list) {
+  const total = list.length;
+  $('statTotal').textContent = total ? `全${total}件` : '';
   if (!total) {
     $('statsTable').innerHTML = '<div class="empty">まだデータがありません。編成を入力して保存すると集計されます。</div>';
     return;
   }
   const counts = new Map();
-  for (const r of records) {
+  for (const r of list) {
     for (const c of new Set(r.characters)) counts.set(c, (counts.get(c) || 0) + 1);
   }
   const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
@@ -388,8 +519,8 @@ function renderStats() {
     </table>`;
 }
 
-function renderPositionStats() {
-  const total = records.length;
+function renderPositionStats(list, slotLabels) {
+  const total = list.length;
   const container = $('positionStatsTable');
 
   if (!total) {
@@ -397,9 +528,9 @@ function renderPositionStats() {
     return;
   }
 
-  // ポジション(D1-4、SP1-2)ごとのキャラ使用回数を集計
+  // ポジションごとのキャラ使用回数を集計
   const positionCounts = Array.from({ length: SLOT_COUNT }, () => new Map());
-  for (const r of records) {
+  for (const r of list) {
     for (let i = 0; i < r.characters.length && i < SLOT_COUNT; i++) {
       const char = r.characters[i];
       const counts = positionCounts[i];
@@ -410,7 +541,7 @@ function renderPositionStats() {
   let html = '<div class="position-stats-col">';
   positionCounts.forEach((counts, i) => {
     const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
-    html += `<div class="position-block"><h3>${POSITION_SHORT_LABELS[i]}</h3><table>`;
+    html += `<div class="position-block"><h3>${slotLabels[i]}</h3><table>`;
     if (rows.length === 0) {
       html += '<tr><td>データなし</td></tr>';
     } else {
@@ -421,13 +552,13 @@ function renderPositionStats() {
   container.innerHTML = html + '</div>';
 }
 
-function renderOpponents() {
-  if (!records.length) {
+function renderOpponents(list) {
+  if (!list.length) {
     $('oppTable').innerHTML = '<div class="empty">まだデータがありません。</div>';
     return;
   }
   const counts = new Map();
-  for (const r of records) {
+  for (const r of list) {
     const label = r.opponent.name || '(名前なし)';
     counts.set(label, (counts.get(label) || 0) + 1);
   }
@@ -439,15 +570,15 @@ function renderOpponents() {
     </table>`;
 }
 
-function renderHistory() {
-  if (!records.length) {
+function renderHistory(list) {
+  if (!list.length) {
     $('historyTable').innerHTML = '<div class="empty">まだデータがありません。</div>';
     return;
   }
-  const rows = [...records].reverse();
+  const rows = [...list].reverse();
   $('historyTable').innerHTML = `
     <table>
-      <thead><tr><th style="width:130px">日時</th><th style="width:150px">相手</th><th style="width:60px">結果</th><th>防御編成</th><th style="width:60px"></th></tr></thead>
+      <thead><tr><th style="width:130px">日時</th><th style="width:150px">相手</th><th style="width:60px">結果</th><th>編成</th><th style="width:60px"></th></tr></thead>
       <tbody>${rows.map((r) => `
         <tr>
           <td>${new Date(r.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
@@ -474,7 +605,7 @@ function esc(s) {
 
 // ---------- バックアップ(エクスポート/インポート) ----------
 function exportRecords() {
-  const blob = new Blob([JSON.stringify({ records }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ records, myTeams }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -483,8 +614,9 @@ function exportRecords() {
   URL.revokeObjectURL(url);
 }
 
-// 旧ローカルサーバー版のdata.json({records:[...]})と、エクスポート済みJSONの両方を受け付ける。
-// 既存データとはid重複を除いてマージする(同じファイルを二重インポートしても増えない)。
+// 旧ローカルサーバー版のdata.json({records:[...]})と、エクスポート済みJSON({records,myTeams})の
+// どちらも受け付ける。既存データとはid重複を除いてマージする(同じファイルを二重インポートしても増えない)。
+// kindが無い古いレコードはoppAttack扱い(モード分割前はこの用途だったため)。
 async function importRecords(file) {
   let parsed;
   try {
@@ -504,6 +636,7 @@ async function importRecords(file) {
     records.push({
       id,
       savedAt: r.savedAt || new Date().toISOString(),
+      kind: r.kind === 'oppDefense' ? 'oppDefense' : 'oppAttack',
       opponent: { name: String(r.opponent?.name ?? '').trim() },
       defenseResult: r.defenseResult === 'Win' || r.defenseResult === 'Lose' ? r.defenseResult : null,
       characters: r.characters.map((c) => String(c).trim()).filter(Boolean),
@@ -511,13 +644,21 @@ async function importRecords(file) {
     added++;
   }
   saveRecords(records);
+  if (!Array.isArray(parsed) && parsed.myTeams) {
+    myTeams = { defense: parsed.myTeams.defense || [], attack: parsed.myTeams.attack || [] };
+    saveMyTeams(myTeams);
+  }
   await refresh();
   setStatus(`${added}件を読み込みました。`);
 }
 
 // ---------- 入力イベント ----------
+$('modeOppAttackBtn').addEventListener('click', () => setMode('oppAttack'));
+$('modeOppDefenseBtn').addEventListener('click', () => setMode('oppDefense'));
 $('saveBtn').addEventListener('click', saveRecord);
 $('clearBtn').addEventListener('click', clearEntry);
+$('saveMyDefenseBtn').addEventListener('click', () => saveMyTeam('myDefenseGrid', 'defense'));
+$('saveMyAttackBtn').addEventListener('click', () => saveMyTeam('myAttackGrid', 'attack'));
 $('exportBtn').addEventListener('click', exportRecords);
 $('importBtn').addEventListener('click', () => $('importFile').click());
 $('importFile').addEventListener('change', () => {
@@ -527,6 +668,7 @@ $('importFile').addEventListener('change', () => {
 });
 
 initCharsGrid();
+initMyTeamsGrids();
 refresh();
 </script>
 </body>
