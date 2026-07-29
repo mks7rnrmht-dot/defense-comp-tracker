@@ -48,7 +48,8 @@
     border-left: 4px solid var(--accent);
     padding-left: 8px;
   }
-  h3.subhead { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  h3.subhead { margin: 18px 0 10px; font-size: 13px; color: var(--muted); }
+  h3.subhead:first-of-type { margin-top: 4px; }
   #status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 18px; }
   #status.error { color: #c0392b; }
   .formrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -60,14 +61,16 @@
     border-radius: 8px;
     background: #fbfdff;
   }
-  .chars-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  /* D1-4/A1-4とSP1-2をそれぞれ揃った幅の列でグループ化する。SPの方は2枠だけ
+     置くが同じ4列グリッドを使うので、D/Aの枠と横幅が揃う。 */
+  .chars-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
   .position-stats-col { display: flex; flex-direction: column; gap: 18px; }
   .position-block h3 { margin: 0 0 6px; font-size: 13px; color: var(--accent-dark); }
   .position-block table { margin-bottom: 4px; }
-  .chars-grid .slot { display: flex; flex-direction: column; gap: 4px; }
-  .chars-grid .slot span { font-size: 11px; color: var(--muted); }
-  .chars-grid .slot-input { display: flex; align-items: center; gap: 6px; }
-  .chars-grid .slot-input input { flex: 1; min-width: 0; }
+  .chars-grid-4 .slot { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .chars-grid-4 .slot span { font-size: 11px; color: var(--muted); }
+  .chars-grid-4 .slot-input { display: flex; align-items: center; gap: 6px; }
+  .chars-grid-4 .slot-input input { flex: 1; min-width: 0; }
   .char-avatar {
     width: 30px; height: 30px; border-radius: 50%; object-fit: cover;
     border: 1px solid var(--border); background: #e9f1f9; flex: none;
@@ -79,8 +82,6 @@
   .slot-mismatch-note { font-size: 11px; color: #c0392b; display: none; }
   .slot-mismatch-note.show { display: block; }
   .mode-toggle { margin-bottom: 14px; }
-  .my-teams-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-  @media (max-width: 720px) { .my-teams-grid { grid-template-columns: 1fr; } }
   button {
     font-size: 14px;
     padding: 8px 20px;
@@ -104,7 +105,9 @@
   .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; }
   .pill.Win { background: var(--win); }
   .pill.Lose { background: var(--lose); }
-  .chips span {
+  .chips { margin-bottom: 4px; }
+  .chips .chips-label { font-size: 11px; color: var(--muted); margin-right: 4px; }
+  .chips span.chip {
     display: inline-block; background: #eef4fa; border: 1px solid var(--border);
     border-radius: 6px; padding: 2px 7px; margin: 1px 2px; font-size: 12px;
   }
@@ -115,7 +118,7 @@
 <body>
 <header>
   <h1>防御編成集計ツール</h1>
-  <span class="sub">戦術対抗戦の相手編成・自分編成を記録して集計</span>
+  <span class="sub">戦術対抗戦の対戦記録(相手編成・自分編成のセット)を記録して集計</span>
 </header>
 <main>
   <section id="entry">
@@ -129,34 +132,25 @@
       <input type="text" id="oppName" size="16">
       <label id="resultLabel">防衛結果</label>
       <select id="defResult">
-        <option value="">不明</option>
-        <option value="Win">Win (防衛成功)</option>
-        <option value="Lose">Lose (防衛失敗)</option>
+        <option value="">-</option>
+        <option value="Win">Win</option>
+        <option value="Lose">Lose</option>
       </select>
     </div>
-    <div class="chars-grid" id="charsGrid"></div>
+
+    <h3 class="subhead" id="oppCompTitle">相手の編成</h3>
+    <div class="chars-grid-4" id="oppGridMain"></div>
+    <div class="chars-grid-4" id="oppGridSp"></div>
+
+    <h3 class="subhead" id="myCompTitle">自分の編成</h3>
+    <div class="chars-grid-4" id="myGridMain"></div>
+    <div class="chars-grid-4" id="myGridSp"></div>
+
     <div class="formrow">
       <button id="saveBtn">この編成を保存</button>
       <button id="clearBtn" class="ghost">クリア</button>
     </div>
     <div id="status"></div>
-  </section>
-
-  <section id="myTeams">
-    <h2>自分の編成</h2>
-    <p class="counts" style="margin:0 0 14px;">対戦相手とは無関係の、自分が今使っている編成のメモです(保存は1件のみ・上書き)。</p>
-    <div class="my-teams-grid">
-      <div>
-        <h3 class="subhead">自分の防衛編成</h3>
-        <div class="chars-grid" id="myDefenseGrid"></div>
-        <button id="saveMyDefenseBtn" class="ghost">自分の防衛編成を保存</button>
-      </div>
-      <div>
-        <h3 class="subhead">自分の攻撃編成</h3>
-        <div class="chars-grid" id="myAttackGrid"></div>
-        <button id="saveMyAttackBtn" class="ghost">自分の攻撃編成を保存</button>
-      </div>
-    </div>
   </section>
 
   <section>
@@ -199,36 +193,38 @@
 <script>
 "use strict";
 
-const SLOT_COUNT = 6;
 const STORAGE_KEY = 'defenseCompRecords'; // ブラウザのlocalStorageに保存(サーバー無しのVercel静的配信のため)
-const MY_TEAMS_KEY = 'defenseCompMyTeams';
+const MY_TEAMS_KEY = 'defenseCompMyTeams'; // 自分側の「今使っている編成」の既定値(入力補助用)
 const CHAR_SOURCE_URL = 'https://ba-timeline.vercel.app/characters.json'; // ba-timelineのキャラ一覧をブラウザから直接fetch(CORS許可済み)
 
-// 相手の防衛編成(自分が攻撃する側)と、相手の攻撃編成(自分が防衛する側)でモードを分ける。
-// このツールは元々「相手の攻撃編成を調べる」用途で作られていたため、既定・旧データのkind無しはoppAttack扱い。
+// 攻撃編成と防衛編成は対戦の両面としてセットで記録する。
+// モードは「相手がどちらの編成を使っているか」を選ぶと、自分側は自動的にもう片方になる。
+//   oppAttack: 相手が攻撃してくる(相手=攻撃編成, 自分=防衛編成) — このツール本来の用途
+//   oppDefense: 自分が攻撃する(相手=防衛編成, 自分=攻撃編成)
 const MODE_CONFIG = {
   oppAttack: {
     title: '相手の攻撃編成',
-    slotLabels: ['A1', 'A2', 'A3', 'A4', 'SP1', 'SP2'],
+    oppLabels: ['A1', 'A2', 'A3', 'A4'],
+    myLabels: ['D1', 'D2', 'D3', 'D4'],
+    myTitle: '自分の防衛編成',
+    myTeamKey: 'defense',
     resultLabel: '防衛結果',
-    winText: 'Win (防衛成功)',
-    loseText: 'Lose (防衛失敗)',
   },
   oppDefense: {
     title: '相手の防衛編成',
-    slotLabels: ['D1', 'D2', 'D3', 'D4', 'SP1', 'SP2'],
+    oppLabels: ['D1', 'D2', 'D3', 'D4'],
+    myLabels: ['A1', 'A2', 'A3', 'A4'],
+    myTitle: '自分の攻撃編成',
+    myTeamKey: 'attack',
     resultLabel: '攻略結果',
-    winText: 'Win (攻略成功)',
-    loseText: 'Lose (攻略失敗)',
   },
 };
-const MY_DEFENSE_LABELS = ['D1', 'D2', 'D3', 'D4', 'SP1', 'SP2'];
-const MY_ATTACK_LABELS = ['A1', 'A2', 'A3', 'A4', 'SP1', 'SP2'];
+const SP_LABELS = ['SP1', 'SP2'];
 let currentMode = 'oppAttack';
 
 let dict = { names: [] };
 let records = [];
-let myTeams = { defense: [], attack: [] };
+let myTeamDefaults = { defense: [], attack: [] }; // 自分側の入力補助用デフォルト(入力するたび自動保存)
 let charImageByName = new Map(); // キャラ名 -> 画像URL(ba-timelineと共有)
 let charRoleByName = new Map();  // キャラ名 -> role("special"/"striker"/"")。ba-timelineのSTRIKER/SPECIAL区分と同じ扱い
 
@@ -238,7 +234,7 @@ function loadRecords() {
     const raw = localStorage.getItem(STORAGE_KEY);
     const list = raw ? JSON.parse(raw) : [];
     // kind未設定の旧データ(モード分割前に保存したもの)はoppAttack扱いにする
-    return list.map((r) => ({ kind: 'oppAttack', ...r }));
+    return list.map((r) => ({ kind: 'oppAttack', myCharacters: [], ...r }));
   } catch {
     return [];
   }
@@ -248,7 +244,7 @@ function saveRecords(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
-function loadMyTeams() {
+function loadMyTeamDefaults() {
   try {
     const raw = localStorage.getItem(MY_TEAMS_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
@@ -258,17 +254,14 @@ function loadMyTeams() {
   }
 }
 
-function saveMyTeams(teams) {
-  localStorage.setItem(MY_TEAMS_KEY, JSON.stringify(teams));
+function saveMyTeamDefaults() {
+  localStorage.setItem(MY_TEAMS_KEY, JSON.stringify(myTeamDefaults));
 }
 
 // ba-timeline側の isStrikerSlot / KNOWN_SPECIALS と同じ判定:
 // role === "special" のみをSPECIAL扱いとし、それ以外(striker/未設定/未登録)はSTRIKER扱いにする。
 function isSpecialRole(name) {
   return charRoleByName.get(normalizeName(name)) === 'special';
-}
-function isSpecialSlotIndex(i) {
-  return i >= 4; // 0-3: 1-4番目, 4-5: SP1-2
 }
 
 // ---------- ユーティリティ ----------
@@ -290,8 +283,8 @@ function setStatus(msg, isError = false) {
 
 // ---------- 入力フォーム(共通スロットUI) ----------
 // 1スロット分(ラベル・顔アイコン・入力欄・役割食い違い警告)を組み立てる。
-// 相手編成入力・自分編成入力のどちらでも使い回す。
-function buildCharSlot(labelText, i) {
+// isSpecial: このスロットがSP(スペシャル)枠かどうか(D1-4/A1-4はfalse、SP1-2はtrue)
+function buildCharSlot(labelText, isSpecial, onInput) {
   const slot = document.createElement('div');
   slot.className = 'slot';
   const label = document.createElement('span');
@@ -303,36 +296,32 @@ function buildCharSlot(labelText, i) {
   avatar.alt = '';
   const input = document.createElement('input');
   input.type = 'text';
-  input.setAttribute('list', isSpecialSlotIndex(i) ? 'chardict-special' : 'chardict-striker');
-  input.addEventListener('input', () => syncAvatar(input));
+  input.dataset.special = isSpecial ? '1' : '0';
+  input.setAttribute('list', isSpecial ? 'chardict-special' : 'chardict-striker');
+  input.addEventListener('input', () => { syncAvatar(input); if (onInput) onInput(); });
   inputWrap.append(avatar, input);
   const mismatchNote = document.createElement('div');
   mismatchNote.className = 'slot-mismatch-note';
-  mismatchNote.textContent = isSpecialSlotIndex(i) ? '⚠ ストライカーのキャラです' : '⚠ スペシャルのキャラです';
+  mismatchNote.textContent = isSpecial ? '⚠ ストライカーのキャラです' : '⚠ スペシャルのキャラです';
   slot.append(label, inputWrap, mismatchNote);
   return slot;
 }
 
-function buildGridInto(containerId, labels) {
-  const grid = $(containerId);
-  grid.innerHTML = '';
-  for (let i = 0; i < SLOT_COUNT; i++) grid.append(buildCharSlot(labels[i], i));
+function buildGrids(mainId, spId, labels, onInput) {
+  const mainGrid = $(mainId);
+  const spGrid = $(spId);
+  mainGrid.innerHTML = '';
+  spGrid.innerHTML = '';
+  labels.forEach((l) => mainGrid.append(buildCharSlot(l, false, onInput)));
+  SP_LABELS.forEach((l) => spGrid.append(buildCharSlot(l, true, onInput)));
 }
 
-function initCharsGrid() {
-  buildGridInto('charsGrid', MODE_CONFIG[currentMode].slotLabels);
+function gridInputs(mainId, spId) {
+  return [...$(mainId).querySelectorAll('input'), ...$(spId).querySelectorAll('input')];
 }
 
-function initMyTeamsGrids() {
-  buildGridInto('myDefenseGrid', MY_DEFENSE_LABELS);
-  buildGridInto('myAttackGrid', MY_ATTACK_LABELS);
-  fillGridInputs('myDefenseGrid', myTeams.defense);
-  fillGridInputs('myAttackGrid', myTeams.attack);
-}
-
-function fillGridInputs(containerId, values) {
-  const inputs = $(containerId).querySelectorAll('input');
-  inputs.forEach((input, i) => {
+function fillGrid(mainId, spId, values) {
+  gridInputs(mainId, spId).forEach((input, i) => {
     input.value = (values && values[i]) || '';
     syncAvatar(input);
   });
@@ -354,28 +343,34 @@ function syncAvatar(input) {
     avatar.src = '';
   }
 
-  const slot = inputWrap.parentElement;
-  const i = [...slot.parentElement.children].indexOf(slot);
   const known = charRoleByName.has(name);
-  const mismatch = name && known && isSpecialRole(name) !== isSpecialSlotIndex(i);
+  const isSpecialSlot = input.dataset.special === '1';
+  const mismatch = name && known && isSpecialRole(name) !== isSpecialSlot;
   inputWrap.classList.toggle('mismatch', mismatch);
   mismatchNote.classList.toggle('show', mismatch);
 }
 
 function syncAllAvatars() {
-  for (const input of document.querySelectorAll('.chars-grid input')) syncAvatar(input);
+  for (const input of document.querySelectorAll('.chars-grid-4 input')) syncAvatar(input);
 }
 
-function clearEntry() {
+// 自分側の入力欄が変わるたびに既定値として自動保存する(次回以降の入力補助のため、
+// 明示的な保存操作は不要にしてある)。
+function persistMyTeamDefault() {
+  const key = MODE_CONFIG[currentMode].myTeamKey;
+  myTeamDefaults[key] = gridInputs('myGridMain', 'myGridSp').map((i) => normalizeName(i.value));
+  saveMyTeamDefaults();
+}
+
+function clearOpponentEntry() {
   $('oppName').value = '';
   $('defResult').value = '';
-  for (const input of $('charsGrid').querySelectorAll('input')) input.value = '';
-  syncAllAvatars();
+  for (const input of gridInputs('oppGridMain', 'oppGridSp')) { input.value = ''; syncAvatar(input); }
   $('oppName').focus();
   setStatus('');
 }
 
-// ---------- モード切り替え(相手の攻撃編成 / 相手の防衛編成) ----------
+// ---------- モード切り替え(相手が攻撃 / 相手が防衛) ----------
 function setMode(mode) {
   currentMode = mode;
   const cfg = MODE_CONFIG[mode];
@@ -383,21 +378,22 @@ function setMode(mode) {
   $('modeOppDefenseBtn').classList.toggle('ghost', mode !== 'oppDefense');
   $('entryTitle').textContent = `${cfg.title}を入力`;
   $('resultLabel').textContent = cfg.resultLabel;
-  const opts = $('defResult').options;
-  opts[1].textContent = cfg.winText;
-  opts[2].textContent = cfg.loseText;
-  clearEntry();
-  initCharsGrid();
-  syncAllAvatars();
+  $('oppCompTitle').textContent = `相手の編成(${cfg.title})`;
+  $('myCompTitle').textContent = cfg.myTitle;
+
+  buildGrids('oppGridMain', 'oppGridSp', cfg.oppLabels);
+  buildGrids('myGridMain', 'myGridSp', cfg.myLabels, persistMyTeamDefault);
+  fillGrid('myGridMain', 'myGridSp', myTeamDefaults[cfg.myTeamKey]);
+
+  clearOpponentEntry();
   renderAll();
 }
 
-// ---------- 保存(相手編成) ----------
+// ---------- 保存 ----------
 async function saveRecord() {
-  const characters = [...$('charsGrid').querySelectorAll('input')]
-    .map((i) => normalizeName(i.value))
-    .filter(Boolean);
-  if (!characters.length) return setStatus('キャラ名が入っていません。', true);
+  const opponentChars = gridInputs('oppGridMain', 'oppGridSp').map((i) => normalizeName(i.value)).filter(Boolean);
+  if (!opponentChars.length) return setStatus('相手のキャラ名が入っていません。', true);
+  const myChars = gridInputs('myGridMain', 'myGridSp').map((i) => normalizeName(i.value)).filter(Boolean);
 
   const opponent = { name: $('oppName').value.trim() };
 
@@ -407,7 +403,7 @@ async function saveRecord() {
   const dup = records.some((r) =>
     (r.kind || 'oppAttack') === currentMode &&
     r.opponent.name === opponent.name &&
-    key(r.characters) === key(characters));
+    key(r.characters) === key(opponentChars));
 
   const record = {
     id: crypto.randomUUID(),
@@ -415,27 +411,21 @@ async function saveRecord() {
     kind: currentMode,
     opponent,
     defenseResult: $('defResult').value || null,
-    characters,
+    characters: opponentChars,
+    myCharacters: myChars,
   };
   records.push(record);
   saveRecords(records);
+  persistMyTeamDefault(); // 自分側は保存時点の内容を次回以降の既定値として引き継ぐ
   await refresh();
-  clearEntry();
+  clearOpponentEntry(); // 相手側だけクリアする。自分の編成は使い回すため残す
   setStatus(dup ? '保存しました(同じ相手・同じ編成の記録が既にありました)。' : '保存しました。');
-}
-
-// ---------- 保存(自分の編成) ----------
-function saveMyTeam(containerId, teamKey) {
-  const values = [...$(containerId).querySelectorAll('input')].map((i) => normalizeName(i.value));
-  myTeams[teamKey] = values;
-  saveMyTeams(myTeams);
-  setStatus('自分の編成を保存しました。');
 }
 
 // ---------- 表示 ----------
 async function refresh() {
   records = loadRecords();
-  myTeams = loadMyTeams();
+  myTeamDefaults = loadMyTeamDefaults();
 
   // ba-timelineのキャラ一覧をブラウザから直接取得(サーバーを挟まない)。
   // 取れなくても保存済みレコードの名前だけで動作は継続する。
@@ -454,7 +444,7 @@ async function refresh() {
 
   const names = new Set(normalizedChars.map((c) => c.name));
   for (const r of records) {
-    for (const name of r.characters || []) if (name) names.add(name);
+    for (const name of [...(r.characters || []), ...(r.myCharacters || [])]) if (name) names.add(name);
   }
   dict = { names: [...names] };
   charImageByName = new Map(normalizedChars.map((c) => [c.name, charBase + c.image]));
@@ -473,8 +463,6 @@ async function refresh() {
     (isSpecialRole(n) ? dlSpecial : dlStriker).append(opt);
   }
 
-  if (!$('myDefenseGrid').children.length) initMyTeamsGrids();
-  else { fillGridInputs('myDefenseGrid', myTeams.defense); fillGridInputs('myAttackGrid', myTeams.attack); }
   syncAllAvatars();
   renderAll();
 }
@@ -487,7 +475,7 @@ function renderAll() {
   $('oppTitle').textContent = `相手別の遭遇回数(${cfg.title})`;
   $('historyTitle').textContent = `保存済み履歴(${cfg.title})`;
   renderStats(scoped);
-  renderPositionStats(scoped, cfg.slotLabels);
+  renderPositionStats(scoped, [...cfg.oppLabels, ...SP_LABELS]);
   renderOpponents(scoped);
   renderHistory(scoped);
 }
@@ -529,9 +517,9 @@ function renderPositionStats(list, slotLabels) {
   }
 
   // ポジションごとのキャラ使用回数を集計
-  const positionCounts = Array.from({ length: SLOT_COUNT }, () => new Map());
+  const positionCounts = Array.from({ length: slotLabels.length }, () => new Map());
   for (const r of list) {
-    for (let i = 0; i < r.characters.length && i < SLOT_COUNT; i++) {
+    for (let i = 0; i < r.characters.length && i < slotLabels.length; i++) {
       const char = r.characters[i];
       const counts = positionCounts[i];
       counts.set(char, (counts.get(char) || 0) + 1);
@@ -578,13 +566,16 @@ function renderHistory(list) {
   const rows = [...list].reverse();
   $('historyTable').innerHTML = `
     <table>
-      <thead><tr><th style="width:130px">日時</th><th style="width:150px">相手</th><th style="width:60px">結果</th><th>編成</th><th style="width:60px"></th></tr></thead>
+      <thead><tr><th style="width:130px">日時</th><th style="width:150px">相手</th><th style="width:60px">結果</th><th>相手の編成 / 自分の編成</th><th style="width:60px"></th></tr></thead>
       <tbody>${rows.map((r) => `
         <tr>
           <td>${new Date(r.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
           <td>${esc(r.opponent.name)}</td>
           <td>${r.defenseResult ? `<span class="pill ${r.defenseResult}">${r.defenseResult}</span>` : '－'}</td>
-          <td class="chips">${r.characters.map((c) => `<span>${esc(c)}</span>`).join('')}</td>
+          <td>
+            <div class="chips"><span class="chips-label">相手</span>${r.characters.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
+            <div class="chips"><span class="chips-label">自分</span>${(r.myCharacters && r.myCharacters.length) ? r.myCharacters.map((c) => `<span class="chip">${esc(c)}</span>`).join('') : '<span class="empty" style="padding:0;display:inline;">(未入力)</span>'}</div>
+          </td>
           <td><button class="danger" data-del="${r.id}">削除</button></td>
         </tr>`).join('')}
       </tbody>
@@ -605,7 +596,7 @@ function esc(s) {
 
 // ---------- バックアップ(エクスポート/インポート) ----------
 function exportRecords() {
-  const blob = new Blob([JSON.stringify({ records, myTeams }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ records, myTeamDefaults }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -614,9 +605,9 @@ function exportRecords() {
   URL.revokeObjectURL(url);
 }
 
-// 旧ローカルサーバー版のdata.json({records:[...]})と、エクスポート済みJSON({records,myTeams})の
+// 旧ローカルサーバー版のdata.json({records:[...]})と、エクスポート済みJSON({records,myTeamDefaults})の
 // どちらも受け付ける。既存データとはid重複を除いてマージする(同じファイルを二重インポートしても増えない)。
-// kindが無い古いレコードはoppAttack扱い(モード分割前はこの用途だったため)。
+// kindが無い古いレコードはoppAttack扱い(モード分割前はこの用途だったため)。myCharactersも無ければ空扱い。
 async function importRecords(file) {
   let parsed;
   try {
@@ -640,13 +631,15 @@ async function importRecords(file) {
       opponent: { name: String(r.opponent?.name ?? '').trim() },
       defenseResult: r.defenseResult === 'Win' || r.defenseResult === 'Lose' ? r.defenseResult : null,
       characters: r.characters.map((c) => String(c).trim()).filter(Boolean),
+      myCharacters: Array.isArray(r.myCharacters) ? r.myCharacters.map((c) => String(c).trim()).filter(Boolean) : [],
     });
     added++;
   }
   saveRecords(records);
-  if (!Array.isArray(parsed) && parsed.myTeams) {
-    myTeams = { defense: parsed.myTeams.defense || [], attack: parsed.myTeams.attack || [] };
-    saveMyTeams(myTeams);
+  const importedDefaults = parsed.myTeamDefaults || parsed.myTeams; // myTeamsは旧エクスポート形式との互換
+  if (!Array.isArray(parsed) && importedDefaults) {
+    myTeamDefaults = { defense: importedDefaults.defense || [], attack: importedDefaults.attack || [] };
+    saveMyTeamDefaults();
   }
   await refresh();
   setStatus(`${added}件を読み込みました。`);
@@ -656,9 +649,7 @@ async function importRecords(file) {
 $('modeOppAttackBtn').addEventListener('click', () => setMode('oppAttack'));
 $('modeOppDefenseBtn').addEventListener('click', () => setMode('oppDefense'));
 $('saveBtn').addEventListener('click', saveRecord);
-$('clearBtn').addEventListener('click', clearEntry);
-$('saveMyDefenseBtn').addEventListener('click', () => saveMyTeam('myDefenseGrid', 'defense'));
-$('saveMyAttackBtn').addEventListener('click', () => saveMyTeam('myAttackGrid', 'attack'));
+$('clearBtn').addEventListener('click', clearOpponentEntry);
 $('exportBtn').addEventListener('click', exportRecords);
 $('importBtn').addEventListener('click', () => $('importFile').click());
 $('importFile').addEventListener('change', () => {
@@ -667,8 +658,8 @@ $('importFile').addEventListener('change', () => {
   $('importFile').value = '';
 });
 
-initCharsGrid();
-initMyTeamsGrids();
+myTeamDefaults = loadMyTeamDefaults();
+setMode('oppAttack');
 refresh();
 </script>
 </body>
