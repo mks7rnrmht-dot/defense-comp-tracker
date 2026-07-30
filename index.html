@@ -462,6 +462,20 @@ function attachAutocomplete(input) {
     else if (e.key === 'ArrowUp') { e.preventDefault(); suggestIndex = Math.max(suggestIndex - 1, 0); highlightSuggest(); }
     else if (e.key === 'Enter') { if (suggestIndex >= 0) { e.preventDefault(); selectSuggest(suggestIndex); } }
     else if (e.key === 'Escape') { closeSuggest(); }
+    else if (e.key === 'Tab') {
+      // マウス無しでも6枠を素早く埋められるように、Tabで次へ移る前に候補を確定する。
+      // ただし空欄のまま(未入力スロットを飛ばしたいだけ)ならTabの既定動作(移動のみ)に任せる。
+      // preventDefaultはしない = Tab本来のフォーカス移動はそのまま活きる。
+      if (!input.value.trim()) return;
+      const exact = normalizeName(input.value);
+      const idx = suggestMatches.includes(exact) ? suggestMatches.indexOf(exact) : (suggestIndex >= 0 ? suggestIndex : 0);
+      const name = suggestMatches[idx];
+      if (name && name !== exact) {
+        input.value = name;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      closeSuggest();
+    }
   });
 }
 
