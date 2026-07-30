@@ -265,7 +265,10 @@
   </section>
 
   <section>
-    <h2 id="historyTitle">保存済み履歴</h2>
+    <div class="formrow" style="margin-bottom:14px;">
+      <h2 id="historyTitle" style="margin:0;">保存済み履歴</h2>
+      <input type="text" id="historySearch" placeholder="相手の名前で検索" style="margin-left:auto; min-width:200px;">
+    </div>
     <div id="historyTable"></div>
   </section>
 </main>
@@ -717,7 +720,11 @@ function renderAll() {
   ];
   renderPositionStats(scoped, groups);
   renderOpponents(scoped);
-  renderHistory(scoped);
+
+  // 履歴だけは検索欄の文字で絞り込む(集計・ポジション別等は全件のまま)
+  const q = $('historySearch').value.trim().toLowerCase();
+  const filtered = q ? scoped.filter((r) => r.opponent.name.toLowerCase().includes(q)) : scoped;
+  renderHistory(filtered, q ? scoped.length : null);
 }
 
 function renderStats(list) {
@@ -825,13 +832,15 @@ function renderOpponents(list) {
     </div>`;
 }
 
-function renderHistory(list) {
+// totalCount: 検索で絞り込んでいるときだけ渡す(全件中の何件かを表示するため)
+function renderHistory(list, totalCount) {
+  const countNote = totalCount != null ? `<p class="counts" style="margin:0 0 8px;">${totalCount}件中 ${list.length}件を表示</p>` : '';
   if (!list.length) {
-    $('historyTable').innerHTML = '<div class="empty">まだデータがありません。</div>';
+    $('historyTable').innerHTML = countNote + `<div class="empty">${totalCount != null ? '一致する記録がありません。' : 'まだデータがありません。'}</div>`;
     return;
   }
   const rows = [...list].reverse();
-  $('historyTable').innerHTML = `
+  $('historyTable').innerHTML = countNote + `
     <table>
       <thead><tr><th style="width:96px">日時</th><th style="width:110px">相手</th><th style="width:56px">結果</th><th>相手の編成 / 自分の編成</th><th style="width:64px"></th></tr></thead>
       <tbody>${rows.map((r) => `
@@ -947,6 +956,8 @@ $('saveBtn').addEventListener('click', saveRecord);
 // 保存すると元の記録を空で上書きしてしまう、という事故を防ぐため)
 $('clearBtn').addEventListener('click', () => (editingId ? cancelEdit() : clearOpponentEntry()));
 $('cancelEditBtn').addEventListener('click', cancelEdit);
+// 履歴の検索: 集計等は再計算せず履歴の表示だけ絞り込むので、renderAllを呼び直せば十分軽い
+$('historySearch').addEventListener('input', renderAll);
 $('exportBtn').addEventListener('click', exportRecords);
 $('importBtn').addEventListener('click', () => $('importFile').click());
 $('importFile').addEventListener('change', () => {
