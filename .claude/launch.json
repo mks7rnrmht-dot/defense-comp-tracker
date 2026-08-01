@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "defense-comp-tracker",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["PORT=3778", "node", "server.js"],
+      "port": 3778
+    }
+  ]
+}
