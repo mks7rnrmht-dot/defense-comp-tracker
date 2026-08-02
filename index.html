@@ -992,7 +992,7 @@ function renderHistory(list, totalCount) {
   const rows = [...list].reverse();
   $('historyTable').innerHTML = countNote + `
     <table>
-      <thead><tr><th style="width:96px">日時</th><th style="width:110px">相手</th><th style="width:56px">結果</th><th style="width:320px">相手の編成 / 自分の編成</th><th style="width:190px">備考</th><th style="width:64px"></th></tr></thead>
+      <thead><tr><th style="width:90px">日時</th><th style="width:100px">相手</th><th style="width:50px">結果</th><th style="width:320px">相手の編成 / 自分の編成</th><th>備考</th><th style="width:56px"></th></tr></thead>
       <tbody>${rows.map((r) => {
         const note = r.notes || '';
         return `
