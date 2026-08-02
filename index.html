@@ -155,10 +155,14 @@
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 600; font-size: 12px; }
-  /* 備考は閲覧時にも入力欄らしい枠を付ける */
-  .note-cell { min-width: 180px; }
+  /* 履歴テーブルは列幅を固定する。auto(既定)だと備考に長い連続文字列(スペース無しの
+     長文等)が入ったとき、折り返しより先に列自体が伸びてしまい、編成のアイコン列まで
+     つられて変な位置で改行される不具合があったため table-layout:fixed で防ぐ */
+  #historyTable { overflow-x: auto; } /* 列幅の合計が画面より広い(狭い画面など)場合は表だけ横スクロールさせる */
+  #historyTable table { table-layout: fixed; }
+  /* 備考は閲覧時にも入力欄らしい枠を付ける。縦にも伸びすぎないよう上限を付けてスクロールにする */
   .note-display {
-    display: block; min-height: 48px; padding: 6px 8px;
+    display: block; min-height: 48px; max-height: 120px; overflow-y: auto; padding: 6px 8px;
     border: 1px dashed #a9c8df; border-radius: 6px;
     background: #f8fbfe; color: var(--text); cursor: text;
     white-space: pre-wrap; overflow-wrap: anywhere;
@@ -988,7 +992,7 @@ function renderHistory(list, totalCount) {
   const rows = [...list].reverse();
   $('historyTable').innerHTML = countNote + `
     <table>
-      <thead><tr><th style="width:96px">日時</th><th style="width:110px">相手</th><th style="width:56px">結果</th><th>相手の編成 / 自分の編成</th><th>備考</th><th style="width:64px"></th></tr></thead>
+      <thead><tr><th style="width:96px">日時</th><th style="width:110px">相手</th><th style="width:56px">結果</th><th style="width:320px">相手の編成 / 自分の編成</th><th style="width:190px">備考</th><th style="width:64px"></th></tr></thead>
       <tbody>${rows.map((r) => {
         const note = r.notes || '';
         return `
