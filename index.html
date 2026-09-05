@@ -70,6 +70,27 @@
     color: var(--accent-dark); text-decoration: none;
   }
   .back-to-top-link:hover { text-decoration: underline; }
+  /* 常時表示の「上に戻る」。ページ本体(max-width:1080px)の外側、右の余白部分に
+     目次のように据え置く。画面が狭く余白が無い時は右下に寄せて画面内に収める */
+  .back-to-top-fab {
+    position: fixed;
+    top: 50%;
+    left: calc(50% + 540px + 16px);
+    transform: translateY(-50%);
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 20px; line-height: 1; text-decoration: none;
+    box-shadow: 0 4px 14px rgba(20, 60, 100, 0.28);
+    transition: background 0.15s;
+    z-index: 500;
+  }
+  .back-to-top-fab:hover { background: var(--accent-dark); }
+  /* 余白が44px+左右マージン分無い画面では右下に寄せる */
+  @media (max-width: 1180px) {
+    .back-to-top-fab { top: auto; left: auto; right: 20px; bottom: 20px; transform: none; }
+  }
   main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
   section {
     background: var(--card);
@@ -334,6 +355,8 @@
     <a href="#entry" class="back-to-top-link">↑ 入力欄まで戻る</a>
   </section>
 </main>
+
+<a href="#top" class="back-to-top-fab" title="上に戻る" aria-label="上に戻る">↑</a>
 
 <script>
 "use strict";
@@ -1198,6 +1221,11 @@ $('importFile').addEventListener('change', () => {
   $('importFile').value = '';
 });
 $('deleteAllBtn').addEventListener('click', deleteAllData);
+// "#top"へのアンカー任せだと(既に#topの状態からのクリックなど)スクロールしないことがあるため、明示的に実装する
+document.querySelector('.back-to-top-fab').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 
 myTeamDefaults = loadMyTeamDefaults();
 setMode('oppAttack');
